@@ -1,5 +1,4 @@
 import type { Metadata } from "next";
-import { ClerkProvider } from "@clerk/nextjs";
 import { Toaster } from "react-hot-toast";
 import "./globals.css";
 
@@ -14,9 +13,19 @@ export const metadata: Metadata = {
   },
 };
 
+const CLERK_KEY = process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY;
+
+async function ClerkWrapper({ children }: { children: React.ReactNode }) {
+  if (CLERK_KEY && CLERK_KEY.startsWith("pk_")) {
+    const { ClerkProvider } = await import("@clerk/nextjs");
+    return <ClerkProvider>{children}</ClerkProvider>;
+  }
+  return <>{children}</>;
+}
+
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <ClerkProvider>
+    <ClerkWrapper>
       <html lang="en" className="dark">
         <head>
           <link rel="preconnect" href="https://fonts.googleapis.com" />
@@ -30,6 +39,6 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           }} />
         </body>
       </html>
-    </ClerkProvider>
+    </ClerkWrapper>
   );
 }

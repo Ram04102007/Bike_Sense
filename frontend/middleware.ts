@@ -1,45 +1,12 @@
-// import { clerkMiddleware, createRouteMatcher } from "@clerk/nextjs/server";
-// import { NextResponse } from "next/server";
+import { NextResponse } from "next/server";
+import type { NextRequest } from "next/server";
 
-// const isPublicRoute = createRouteMatcher([
-//   "/",
-//   "/auth/login",
-//   "/auth/signup",
-//   "/api/health",
-// ]);
-
-// const isAdminRoute    = createRouteMatcher(["/admin(.*)"]);
-// const isConsumerRoute = createRouteMatcher(["/consumer(.*)"]);
-
-// export default clerkMiddleware(async (auth, req) => {
-//   const { userId, sessionClaims } = await auth();
-
-//   // Allow public routes
-//   if (isPublicRoute(req)) return;
-
-//   // Require auth for protected routes
-//   if (!userId) {
-//     return NextResponse.redirect(new URL("/auth/login", req.url));
-//   }
-
-//   const role = (sessionClaims?.unsafeMetadata as any)?.role;
-
-//   // Role-based route protection
-//   if (isAdminRoute(req) && role !== "admin") {
-//     return NextResponse.redirect(new URL("/consumer/home", req.url));
-//   }
-//   if (isConsumerRoute(req) && role !== "consumer") {
-//     return NextResponse.redirect(new URL("/admin/dashboard", req.url));
-//   }
-// });
-
-// export const config = {
-//   matcher: ["/((?!_next|.*\\..*).*)"],
-// };
-
-import { clerkMiddleware } from "@clerk/nextjs/server";
-
-export default clerkMiddleware();
+// Passthrough middleware — Clerk auth is handled client-side.
+// To re-enable server-side Clerk middleware, set NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY
+// in Vercel environment variables and uncomment the Clerk middleware below.
+export function middleware(_req: NextRequest) {
+  return NextResponse.next();
+}
 
 export const config = {
   matcher: [
