@@ -3,20 +3,27 @@ import { useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
-import { UserButton } from "@clerk/nextjs";
 import {
   Home, Search, Bike, MapPin, Gift, TrendingUp,
   User, Bell, Menu, X, ChevronRight, Zap
 } from "lucide-react";
 
+const CLERK_KEY = process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY;
+const hasClerk = !!(CLERK_KEY && CLERK_KEY.startsWith("pk_"));
+
+function SafeUserButton() {
+  return (
+    <div className="w-8 h-8 rounded-full bg-emerald-500/20 border border-emerald-500/30 flex items-center justify-center">
+      <User className="w-4 h-4 text-emerald-400" />
+    </div>
+  );
+}
+
 const navItems = [
-  { href:"/consumer/home",        label:"Home",         icon:Home },
+  { href:"/consumer/home",        label:"Home",          icon:Home },
   { href:"/consumer/predict",     label:"Price Predictor",icon:Zap },
-  { href:"/consumer/marketplace", label:"Bikes",        icon:Bike },
-  { href:"/consumer/best-time",   label:"Best Time",    icon:TrendingUp },
-  { href:"/consumer/map",         label:"Map",          icon:MapPin },
-  { href:"/consumer/loyalty",     label:"Rewards",      icon:Gift },
-  { href:"/consumer/profile",     label:"Profile",      icon:User },
+  { href:"/consumer/marketplace", label:"Bikes",         icon:Bike },
+  { href:"/consumer/loyalty",     label:"Rewards",       icon:Gift },
 ];
 
 export default function ConsumerLayout({ children }: { children: React.ReactNode }) {
@@ -103,7 +110,7 @@ export default function ConsumerLayout({ children }: { children: React.ReactNode
               <Bell className="w-4 h-4" />
               <span className="absolute top-1 right-1 w-2 h-2 bg-emerald-500 rounded-full" />
             </button>
-            <UserButton afterSignOutUrl="/" />
+            <SafeUserButton />
           </div>
         </header>
 
