@@ -1,0 +1,190 @@
+// BikeSense — Prisma Schema
+// Database: PostgreSQL (Supabase)
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+// ─── Users ────────────────────────────────────────────────────────────────────
+model User {
+  id          String   @id @default(cuid())
+  clerkId     String   @unique
+  email       String   @unique
+  firstName   String?
+  lastName    String?
+  role        UserRole @default(CONSUMER)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  // Relations
+  company     Company?
+  bookings    Booking[]
+  rewards     Reward[]
+
+  @@map("users")
+}
+
+enum UserRole {
+  ADMIN
+  CONSUMER
+}
+
+// ─── Companies (Admin users) ──────────────────────────────────────────────────
+model Company {
+  id          String   @id @default(cuid())
+  name        String
+  userId      String   @unique
+  user        User     @relation(fields:[userId], references:[id])
+  plan        Plan     @default(STARTER)
+  apiKey      String   @unique @default(cuid())
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  bikes       Bike[]
+  branches    Branch[]
+
+  @@map("companies")
+}
+
+enum Plan {
+  STARTER
+  GROWTH
+  ENTERPRISE
+}
+
+// ─── Branches ─────────────────────────────────────────────────────────────────
+model Branch {
+  id          String  @id @default(cuid())
+  companyId   String
+  company     Company @relation(fields:[companyId], references:[id])
+  name        String
+  area        String
+  latitude    Float
+  longitude   Float
+  active      Boolean @default(true)
+  createdAt   DateTime @default(now())
+
+  bikes       Bike[]
+
+  @@map("branches")
+}
+
+// ─── Bikes ────────────────────────────────────────────────────────────────────
+model Bike {
+  id          String    @id @default(cuid())
+  companyId   String
+  company     Company   @relation(fields:[companyId], references:[id])
+  branchId    String?
+  branch      Branch?   @relation(fields:[branchId], references:[id])
+  model       String
+  type        BikeType
+  status      BikeStatus @default(AVAILABLE)
+  batteryPct  Int?
+  rangeKm     Int?
+  pricePerHr  Float
+  latitude    Float?
+  longitude   Float?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  bookings    Booking[]
+
+  @@map("bikes")
+}
+
+enum BikeType {
+  EV
+  SCOOTER
+  PREMIUM
+  BUDGET
+}
+
+enum BikeStatus {
+  AVAILABLE
+  IN_USE
+  MAINTENANCE
+  LOW_BATTERY
+  OFFLINE
+}
+
+// ─── Bookings ─────────────────────────────────────────────────────────────────
+model Booking {
+  id            String        @id @default(cuid())
+  userId        String
+  user          User          @relation(fields:[userId], references:[id])
+  bikeId        String
+  bike          Bike          @relation(fields:[bikeId], references:[id])
+  status        BookingStatus @default(CONFIRMED)
+  pickupArea    String
+  dropArea      String?
+  startTime     DateTime
+  endTime       DateTime?
+  durationHrs   Float?
+  basePrice     Float
+  surgeMultiplier Float       @default(1.0)
+  finalPrice    Float
+  totalCost     Float?
+  pointsEarned  Int           @default(0)
+  createdAt     DateTime      @default(now())
+  updatedAt     DateTime      @updatedAt
+
+  @@map("bookings")
+}
+
+enum BookingStatus {
+  CONFIRMED
+  IN_PROGRESS
+  COMPLETED
+  CANCELLED
+}
+
+// ─── Rewards ──────────────────────────────────────────────────────────────────
+model Reward {
+  id          String   @id @default(cuid())
+  userId      String
+  user        User     @relation(fields:[userId], references:[id])
+  points      Int      @default(0)
+  tier        RewardTier @default(BRONZE)
+  updatedAt   DateTime @updatedAt
+
+  @@map("rewards")
+}
+
+enum RewardTier {
+  BRONZE
+  SILVER
+  GOLD
+  PLATINUM
+}
+
+// ─── Demand Forecasts (cached) ────────────────────────────────────────────────
+model DemandForecast {
+  id          String   @id @default(cuid())
+  area        String
+  forecastDt  DateTime
+  demandValue Float
+  confidence  Float?
+  createdAt   DateTime @default(now())
+
+  @@unique([area, forecastDt])
+  @@map("demand_forecasts")
+}
+
+// ─── Price Logs ───────────────────────────────────────────────────────────────
+model PriceLog {
+  id          String   @id @default(cuid())
+  area        String
+  loggedAt    DateTime @default(now())
+  basePrice   Float
+  surgeMultiplier Float
+  finalPrice  Float
+  demandLevel String
+
+  @@map("price_logs")
+}

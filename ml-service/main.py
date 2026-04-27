@@ -1,0 +1,67 @@
+"""
+BikeSense AI — FastAPI ML Microservice
+SARIMA/SARIMAX Demand & Price Forecasting Engine
+"""
+
+from fastapi import FastAPI, HTTPException
+from fastapi.middleware.cors import CORSMiddleware
+from contextlib import asynccontextmanager
+import uvicorn
+import logging
+
+from core.model_engine import ModelEngine
+from routers import predict, admin, consumer
+
+logger = logging.getLogger("bikesense")
+engine: ModelEngine = None
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    global engine
+    logger.info("🚲 BikeSense ML Engine — Initialising SARIMA models...")
+    engine = ModelEngine()
+    engine.train()
+    app.state.engine = engine
+    logger.info("✅ Models ready. Serving predictions.")
+    yield
+    logger.info("Shutting down ML service...")
+
+
+app = FastAPI(
+    title="BikeSense AI — ML Forecasting Service",
+    description="SARIMA/SARIMAX demand & dynamic pricing predictions for Bangalore bike rentals",
+    version="2.0.0",
+    lifespan=lifespan,
+)
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+app.include_router(predict.router, prefix="/api/v1", tags=["Predictions"])
+app.include_router(admin.router,   prefix="/api/v1/admin", tags=["Admin"])
+app.include_router(consumer.router,prefix="/api/v1/consumer", tags=["Consumer"])
+
+
+@app.get("/health")
+async def health():
+    return {"status": "healthy", "model": "SARIMA/SARIMAX", "version": "2.0.0"}
+
+
+@app.get("/")
+async def root():
+    return {
+        "service": "BikeSense AI Forecasting Engine",
+        "endpoints": ["/api/v1/predict-demand", "/api/v1/predict-price",
+                      "/api/v1/admin/revenue", "/api/v1/admin/heatmap",
+                      "/api/v1/consumer/bikes", "/api/v1/consumer/recommendations"]
+    }
+
+
+if __name__ == "__main__":
+    uvicorn.run("main:app", host="0.0.0.0", port=8000, reload=True)
