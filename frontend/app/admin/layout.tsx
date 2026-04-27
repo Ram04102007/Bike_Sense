@@ -3,12 +3,27 @@ import { useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
-import { UserButton } from "@clerk/nextjs";
 import {
   LayoutDashboard, TrendingUp, DollarSign, Bike, Map, Users,
   FileBarChart2, Settings, Menu, X, ChevronRight, Bell, Search,
-  Zap
+  Zap, User
 } from "lucide-react";
+
+const CLERK_KEY = process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY;
+const hasClerk = !!(CLERK_KEY && CLERK_KEY.startsWith("pk_"));
+
+function SafeUserButton() {
+  if (!hasClerk) {
+    return (
+      <div className="w-8 h-8 rounded-full bg-brand-500/20 border border-brand-500/30 flex items-center justify-center">
+        <User className="w-4 h-4 text-brand-400" />
+      </div>
+    );
+  }
+  // Dynamic import so it only loads when Clerk is available
+  const { UserButton } = require("@clerk/nextjs");
+  return <UserButton afterSignOutUrl="/" />;
+}
 
 const navItems = [
   { href:"/admin/dashboard",   label:"Dashboard",      icon:LayoutDashboard },
@@ -118,7 +133,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
               <Bell className="w-4 h-4" />
               <span className="absolute top-1 right-1 w-2 h-2 bg-brand-500 rounded-full" />
             </button>
-            <UserButton afterSignOutUrl="/" />
+            <SafeUserButton />
           </div>
         </header>
 
