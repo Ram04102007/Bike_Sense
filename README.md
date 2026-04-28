@@ -1,4 +1,4 @@
-# 🚲 BikeSense AI — Intelligent Bike Demand Forecasting
+# 🏍️ BikeSense AI — Intelligent Bike Demand Forecasting
 
 > **Production-grade** AI-powered bike rental demand forecasting platform for Bangalore's mobility ecosystem.  
 > Built with SARIMA/SARIMAX on 17,379 real hourly records · Two role-based dashboards · Investor-ready.
