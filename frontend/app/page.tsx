@@ -128,7 +128,7 @@ function Navbar() {
           <span className="font-display font-bold text-lg text-white">Bike<span className="text-gradient-brand">Sense</span></span>
         </div>
         <div className="hidden md:flex items-center gap-8 text-sm text-slate-400">
-          {["Features","Pricing","About","Docs"].map(l => (
+          {["Features", "About"].map(l => (
             <a key={l} href={`#${l.toLowerCase()}`} className="hover:text-white transition-colors">{l}</a>
           ))}
         </div>
