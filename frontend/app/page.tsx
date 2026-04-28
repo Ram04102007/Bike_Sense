@@ -473,83 +473,7 @@ function DashboardsSection() {
   );
 }
 
-// ─── Testimonials ─────────────────────────────────────────────────────────
-function Testimonials() {
-  return (
-    <section className="py-24 bg-dark-800/30">
-      <div className="max-w-7xl mx-auto px-6">
-        <motion.div initial={{opacity:0,y:20}} whileInView={{opacity:1,y:0}} viewport={{once:true}}
-          className="text-center mb-16">
-          <h2 className="font-display font-bold text-4xl text-white mb-4">Loved by operators and riders</h2>
-        </motion.div>
-        <div className="grid md:grid-cols-3 gap-6">
-          {testimonials.map((t, i) => (
-            <motion.div key={t.name} initial={{opacity:0,y:30}} whileInView={{opacity:1,y:0}}
-              transition={{delay:i*0.1}} viewport={{once:true}}
-              className="glass rounded-2xl p-6 hover-lift">
-              <div className="flex gap-1 mb-4">
-                {Array.from({length:t.rating}).map((_,j)=><Star key={j} className="w-4 h-4 fill-amber-400 text-amber-400"/>)}
-              </div>
-              <p className="text-slate-300 leading-relaxed mb-6 italic">"{t.text}"</p>
-              <div>
-                <div className="font-semibold text-white">{t.name}</div>
-                <div className="text-sm text-slate-500">{t.role}</div>
-              </div>
-            </motion.div>
-          ))}
-        </div>
-      </div>
-    </section>
-  );
-}
 
-// ─── Pricing ──────────────────────────────────────────────────────────────
-function Pricing() {
-  return (
-    <section id="pricing" className="py-24">
-      <div className="max-w-7xl mx-auto px-6">
-        <motion.div initial={{opacity:0,y:20}} whileInView={{opacity:1,y:0}} viewport={{once:true}}
-          className="text-center mb-16">
-          <h2 className="font-display font-bold text-4xl text-white mb-4">Simple, transparent pricing</h2>
-          <p className="text-slate-400">Start free. Scale as your fleet grows.</p>
-        </motion.div>
-        <div className="grid md:grid-cols-3 gap-6 items-start">
-          {plans.map((p, i) => (
-            <motion.div key={p.name} initial={{opacity:0,y:30}} whileInView={{opacity:1,y:0}}
-              transition={{delay:i*0.1}} viewport={{once:true}}
-              className={`rounded-2xl p-8 relative ${p.popular?"border-gradient":"glass"}`}
-              style={p.popular?{background:"rgba(99,102,241,0.07)"}:{}}>
-              {p.popular && (
-                <div className="absolute -top-4 left-1/2 -translate-x-1/2">
-                  <span className="bg-brand-500 text-white text-xs font-bold px-4 py-1.5 rounded-full">
-                    Most Popular
-                  </span>
-                </div>
-              )}
-              <div className="text-sm text-slate-400 mb-2">{p.name}</div>
-              <div className="flex items-end gap-1 mb-6">
-                <span className="text-4xl font-display font-bold text-white">{p.price}</span>
-                <span className="text-slate-500 mb-1">{p.period}</span>
-              </div>
-              <ul className="space-y-3 mb-8">
-                {p.features.map(f=>(
-                  <li key={f} className="flex items-center gap-2.5 text-sm text-slate-300">
-                    <CheckCircle2 className="w-4 h-4 shrink-0" style={{color:p.color}} />
-                    {f}
-                  </li>
-                ))}
-              </ul>
-              <Link href="/auth/signup?role=admin"
-                className={`w-full flex justify-center py-2.5 rounded-lg font-semibold text-sm transition-all ${p.popular?"btn-primary":"btn-ghost"}`}>
-                Get Started
-              </Link>
-            </motion.div>
-          ))}
-        </div>
-      </div>
-    </section>
-  );
-}
 
 // ─── CTA ──────────────────────────────────────────────────────────────────
 function CTA() {
@@ -611,8 +535,6 @@ export default function LandingPage() {
       <Features />
       <HowItWorks />
       <DashboardsSection />
-      <Testimonials />
-      <Pricing />
       <CTA />
       <Footer />
     </main>
