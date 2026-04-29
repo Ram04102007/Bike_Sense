@@ -62,6 +62,20 @@ function buildHeatmap(raw: { area: string; hour: number; demand: number }[]): He
   return Object.entries(map).map(([area, hours]) => ({ area, hours }));
 }
 
+/** Formula-based fallback heatmap — mirrors the ML engine's area_weights × hourly_profile */
+const FALLBACK_HEATMAP: HeatRow[] = (() => {
+  const areas  = ["Indiranagar","Koramangala","Whitefield","Marathahalli","HSR Layout","Jayanagar","Electronic City","Hebbal"];
+  const weights = [1.3, 1.2, 1.1, 1.0, 1.15, 0.9, 0.95, 0.85];
+  return areas.map((area, ai) => ({
+    area,
+    hours: Array.from({ length: 24 }, (_, hr) => {
+      const rush = Math.exp(-0.5 * ((hr - 8) / 2.5) ** 2) * 0.8
+                 + Math.exp(-0.5 * ((hr - 18) / 2.5) ** 2) * 0.6;
+      return Math.round((80 + rush * 120) * weights[ai]);
+    }),
+  }));
+})();
+
 function Skeleton({ className = "" }: { className?: string }) {
   return <div className={`animate-pulse bg-white/5 rounded-lg ${className}`} />;
 }
@@ -234,44 +248,47 @@ export default function ForecastingPage() {
           <h3 className="font-display font-semibold text-white mb-4">Demand Heatmap · Hour × Zone</h3>
           {loading
             ? <Skeleton className="h-48" />
-            : heatmapData.length > 0
-              ? (
-                <div className="overflow-x-auto">
-                  <div className="min-w-max">
-                    <div className="flex items-center ml-24 mb-1 gap-0.5">
-                      {[0, 3, 6, 9, 12, 15, 18, 21].map(h => (
-                        <div key={h} className="w-7 text-center text-xs text-slate-600">{h}h</div>
-                      ))}
-                    </div>
-                    {heatmapData.map(row => (
-                      <div key={row.area} className="flex items-center gap-0.5 mb-0.5">
-                        <span className="text-xs text-slate-400 w-24 shrink-0 truncate">{row.area}</span>
-                        {row.hours.filter((_, i) => i % 3 === 0).map((val, i) => (
-                          <div key={i}
-                            className={`w-7 h-7 rounded-sm ${demandColor(val)} flex items-center justify-center`}
-                            style={{ opacity: Math.max(0.3, Math.min(0.95, val / 200)) }}
-                            title={`${row.area} @ ${i * 3}:00 → ${val} rides`}
-                          />
+            : (() => {
+                // Use real API data when available, otherwise the formula fallback
+                const rows = heatmapData.length > 0 ? heatmapData : FALLBACK_HEATMAP;
+                return (
+                  <div className="overflow-x-auto">
+                    <div className="min-w-max">
+                      {/* Hour labels */}
+                      <div className="flex items-center ml-24 mb-1 gap-0.5">
+                        {[0, 3, 6, 9, 12, 15, 18, 21].map(h => (
+                          <div key={h} className="w-7 text-center text-xs text-slate-600">{h}h</div>
                         ))}
                       </div>
-                    ))}
-                    <div className="flex items-center gap-2 mt-3 text-xs text-slate-500">
-                      <span>Low</span>
-                      {["bg-slate-600","bg-emerald-500","bg-amber-400","bg-orange-400","bg-red-500"].map((c, i) => (
-                        <div key={i} className={`w-4 h-4 rounded-sm ${c}`} />
+                      {/* Zone rows */}
+                      {rows.map(row => (
+                        <div key={row.area} className="flex items-center gap-0.5 mb-0.5">
+                          <span className="text-xs text-slate-400 w-24 shrink-0 truncate">{row.area}</span>
+                          {row.hours.filter((_, i) => i % 3 === 0).map((val, i) => (
+                            <div
+                              key={i}
+                              className={`w-7 h-7 rounded-sm ${demandColor(val)}`}
+                              style={{ opacity: Math.max(0.25, Math.min(0.95, val / 200)) }}
+                              title={`${row.area} @ ${i * 3}:00 → ${val} rides`}
+                            />
+                          ))}
+                        </div>
                       ))}
-                      <span>High</span>
+                      {/* Legend */}
+                      <div className="flex items-center gap-2 mt-3 text-xs text-slate-500">
+                        <span>Low</span>
+                        {["bg-slate-600","bg-emerald-500","bg-amber-400","bg-orange-400","bg-red-500"].map((c, i) => (
+                          <div key={i} className={`w-4 h-4 rounded-sm ${c}`} />
+                        ))}
+                        <span>High</span>
+                        {heatmapData.length === 0 && (
+                          <span className="ml-2 text-slate-600 italic">(formula estimate)</span>
+                        )}
+                      </div>
                     </div>
                   </div>
-                </div>
-              )
-              : (
-                // Fallback formula-based heatmap when API gives no data
-                <div className="text-center py-8 text-slate-500 text-sm">
-                  <WifiOff className="w-8 h-8 mx-auto mb-2 opacity-40" />
-                  Heatmap requires live backend connection
-                </div>
-              )}
+                );
+              })()}
         </div>
 
         {/* Price Trajectory from hourly forecast */}
