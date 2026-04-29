@@ -1,11 +1,12 @@
 "use client";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { motion } from "framer-motion";
 import {
   BarChart, Bar, LineChart, Line, XAxis, YAxis,
   CartesianGrid, Tooltip, ResponsiveContainer, ReferenceLine
 } from "recharts";
-import { DollarSign, Zap, TrendingUp, Settings, RefreshCw } from "lucide-react";
+import { DollarSign, Zap, TrendingUp, Settings, RefreshCw, WifiOff } from "lucide-react";
+import { getPricingRec } from "@/lib/api";
 
 const AREAS = ["Indiranagar","Koramangala","Whitefield","Marathahalli","HSR Layout","Jayanagar","Electronic City","Hebbal"];
 
@@ -56,13 +57,40 @@ export default function PricingPage() {
   const [selectedArea, setSelectedArea] = useState("Indiranagar");
   const [selectedHour, setSelectedHour] = useState(8);
   const [isWeekend, setIsWeekend] = useState(false);
+  const [mlRec, setMlRec]           = useState<any>(null);
+  const [recLoading, setRecLoading]  = useState(false);
+  const [isLive, setIsLive]          = useState<boolean | null>(null);
 
+  // Local formula-based computation (always instant)
   const computedSurge = selectedHour>=7&&selectedHour<=9||selectedHour>=17&&selectedHour<=20 ? 1.25
     : selectedHour>=10&&selectedHour<=15 ? 1.0 : 1.08;
   const weekendBoost = isWeekend ? 1.1 : 1.0;
   const areaBoost = {Indiranagar:1.15,Koramangala:1.10,Whitefield:1.05,Marathahalli:1.0,
     "HSR Layout":1.08,Jayanagar:0.95,"Electronic City":1.0,Hebbal:0.90}[selectedArea] || 1.0;
-  const finalPrice = parseFloat((basePrice * computedSurge * weekendBoost * areaBoost).toFixed(2));
+  const finalPrice = mlRec
+    ? parseFloat((basePrice * mlRec.surge_multiplier * weekendBoost).toFixed(2))
+    : parseFloat((basePrice * computedSurge * weekendBoost * areaBoost).toFixed(2));
+  const activeSurge = mlRec ? mlRec.surge_multiplier : computedSurge;
+
+  const fetchRecommendation = async () => {
+    setRecLoading(true);
+    try {
+      const rec = await getPricingRec(selectedArea, selectedHour, isWeekend);
+      if (rec) {
+        setMlRec(rec);
+        setIsLive(true);
+      } else {
+        setIsLive(false);
+      }
+    } catch {
+      setIsLive(false);
+    } finally {
+      setRecLoading(false);
+    }
+  };
+
+  // Auto-fetch when area/hour/weekend changes
+  useEffect(() => { fetchRecommendation(); }, [selectedArea, selectedHour, isWeekend]);
 
   return (
     <div className="space-y-6">
@@ -74,9 +102,17 @@ export default function PricingPage() {
           </h1>
           <p className="text-slate-500 text-sm mt-0.5">AI-driven surge pricing · 4-tier model · SARIMA-calibrated</p>
         </div>
-        <button className="btn-ghost flex items-center gap-2 text-sm">
-          <RefreshCw className="w-4 h-4" /> Recalibrate
-        </button>
+        <div className="flex items-center gap-3">
+          {isLive !== null && (
+            <span className={`flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-lg ${ isLive ? "bg-emerald-500/10 text-emerald-300 border border-emerald-500/20" : "bg-blue-500/10 text-blue-300 border border-blue-500/20" }`}>
+              {isLive ? <TrendingUp className="w-3 h-3" /> : <WifiOff className="w-3 h-3" />}
+              {isLive ? "ML Calibrated" : "Formula Mode"}
+            </span>
+          )}
+          <button onClick={fetchRecommendation} disabled={recLoading} className="btn-ghost flex items-center gap-2 text-sm">
+            <RefreshCw className={`w-4 h-4 ${recLoading ? "animate-spin" : ""}`} /> Recalibrate
+          </button>
+        </div>
       </div>
 
       {/* Surge tiers */}
@@ -140,14 +176,25 @@ export default function PricingPage() {
 
           {/* Result */}
           <div className="mt-5 p-5 rounded-xl" style={{background:"linear-gradient(135deg,rgba(99,102,241,0.15),rgba(0,245,255,0.05))"}}>
-            <div className="text-xs text-slate-500 mb-1">Recommended Price</div>
-            <div className="text-4xl font-display font-bold text-white mb-1">₹{finalPrice}</div>
-            <div className="text-xs text-slate-400">
-              ×{computedSurge} surge · {isWeekend?"×1.1 weekend":"standard"} · {selectedArea}
+            <div className="text-xs text-slate-500 mb-1">
+              {mlRec ? "ML-Calibrated Price" : "Recommended Price"}
             </div>
+            {recLoading ? (
+              <div className="h-10 w-28 animate-pulse bg-white/10 rounded-lg mb-1" />
+            ) : (
+              <div className="text-4xl font-display font-bold text-white mb-1">₹{finalPrice}</div>
+            )}
+            <div className="text-xs text-slate-400">
+              ×{activeSurge.toFixed(2)} surge · {isWeekend?"×1.1 weekend":"standard"} · {selectedArea}
+            </div>
+            {mlRec && (
+              <div className="text-xs text-slate-500 mt-0.5">
+                Demand Index: {mlRec.demand_index} · {mlRec.strategy}
+              </div>
+            )}
             <div className="mt-3 text-xs">
-              <span className={`${computedSurge>=1.25?"badge-danger":computedSurge>=1.08?"badge-warning":"badge-success"}`}>
-                {computedSurge>=1.25?"Peak Surge":computedSurge>=1.08?"Moderate":"Standard"}
+              <span className={`${activeSurge>=1.25?"badge-danger":activeSurge>=1.08?"badge-warning":"badge-success"}`}>
+                {activeSurge>=1.25?"Peak Surge":activeSurge>=1.08?"Moderate":"Standard"}
               </span>
             </div>
           </div>
