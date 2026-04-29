@@ -9,22 +9,7 @@ import {
   TrendingUp, TrendingDown, Bike, Users, DollarSign, BarChart2,
   Activity, AlertTriangle, CheckCircle, Clock, Zap, RefreshCw
 } from "lucide-react";
-import { getAdminRevenue, getShortForecast, getHeatmapData, type RevenueData, type ForecastPoint } from "@/lib/api";
-
-// ─── Static zone weights (from ML engine constants) ───────────────────────────
-const ZONE_WEIGHTS: Record<string, number> = {
-  Indiranagar: 1.3, Koramangala: 1.2, Whitefield: 1.1, Marathahalli: 1.0,
-  "HSR Layout": 1.15, Jayanagar: 0.9, "Electronic City": 0.95, Hebbal: 0.85,
-};
-const ZONE_NAMES = Object.keys(ZONE_WEIGHTS);
-
-// ─── Alert data (static — would need a dedicated alerting endpoint) ───────────
-const recentAlerts = [
-  { type: "warning", msg: "Whitefield demand spike expected 5–7 PM", time: "2 min ago" },
-  { type: "success", msg: "Fleet rebalanced in Koramangala (12 bikes)", time: "18 min ago" },
-  { type: "info",    msg: "Monthly report ready for export", time: "1 hr ago" },
-  { type: "warning", msg: "Low battery: 6 Ather 450X in Electronic City", time: "2 hr ago" },
-];
+import { getAdminRevenue, getShortForecast, getHeatmapData, getLiveAlerts, getZoneIntelligence, type RevenueData, type ForecastPoint } from "@/lib/api";
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 /** Aggregate hourly SARIMA forecast into 7 daily buckets */
@@ -49,18 +34,7 @@ function aggregateToDays(points: ForecastPoint[]): { day: string; demand: number
   }));
 }
 
-/** Build zone data from heatmap API (sum across all hours per zone) */
-function buildZoneData(heatmap: { area: string; hour: number; demand: number }[]) {
-  const totals: Record<string, number> = {};
-  heatmap.forEach(row => {
-    totals[row.area] = (totals[row.area] ?? 0) + row.demand;
-  });
-  return ZONE_NAMES.map(zone => {
-    const rides = Math.round((totals[zone] ?? 0) * 48); // scale to monthly estimate
-    const surge = ZONE_WEIGHTS[zone] > 1.2 ? 1.17 : ZONE_WEIGHTS[zone] > 1.1 ? 1.08 : 1.0;
-    return { zone, rides, revenue: Math.round(rides * 68.8), surge };
-  }).sort((a, b) => b.revenue - a.revenue);
-}
+
 
 // ─── Sub-components ───────────────────────────────────────────────────────────
 function Skeleton({ className = "" }: { className?: string }) {
@@ -93,6 +67,7 @@ export default function AdminDashboard() {
   const [revenue, setRevenue] = useState<RevenueData | null>(null);
   const [weeklyData, setWeeklyData] = useState<{ day: string; demand: number; revenue: number }[]>([]);
   const [zoneData, setZoneData] = useState<{ zone: string; rides: number; revenue: number; surge: number }[]>([]);
+  const [alerts, setAlerts] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [dataSource, setDataSource] = useState<"live" | "fallback">("live");
   const [lastRefresh, setLastRefresh] = useState<Date | null>(null);
@@ -109,26 +84,17 @@ export default function AdminDashboard() {
   const loadData = async () => {
     setLoading(true);
     try {
-      const [rev, forecast, heatmap] = await Promise.all([
+      const [rev, forecast, heatmap, alertsData, zoneIntelData] = await Promise.all([
         getAdminRevenue(),
         getShortForecast(),
         getHeatmapData(),
+        getLiveAlerts(),
+        getZoneIntelligence(),
       ]);
       setRevenue(rev);
+      setAlerts(alertsData);
       setWeeklyData(aggregateToDays(forecast));
-      if (heatmap.length > 0) {
-        setZoneData(buildZoneData(heatmap));
-      } else {
-        // Fallback zone from revenue data proportionally
-        setZoneData(
-          ZONE_NAMES.map(zone => ({
-            zone,
-            rides: Math.round((rev.monthly_rides / ZONE_NAMES.length) * ZONE_WEIGHTS[zone]),
-            revenue: Math.round((rev.total_revenue / ZONE_NAMES.length) * ZONE_WEIGHTS[zone]),
-            surge: ZONE_WEIGHTS[zone] > 1.2 ? 1.17 : ZONE_WEIGHTS[zone] > 1.1 ? 1.08 : 1.0,
-          })).sort((a, b) => b.revenue - a.revenue)
-        );
-      }
+      setZoneData(zoneIntelData);
       // Detect if we got real or mock data (real will have non-round total_revenue)
       setDataSource(rev.total_revenue % 1000 !== 0 ? "live" : "fallback");
       setLastRefresh(new Date());
@@ -304,7 +270,7 @@ export default function AdminDashboard() {
             <Zap className="w-4 h-4 text-amber-400" />
           </div>
           <div className="space-y-3">
-            {recentAlerts.map((a, i) => (
+            {alerts.map((a, i) => (
               <motion.div key={i} initial={{ opacity: 0, x: -10 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: i * 0.1 }}
                 className="flex gap-3 p-3 glass-light rounded-lg">
                 {a.type === "warning" && <AlertTriangle className="w-4 h-4 text-amber-400 shrink-0 mt-0.5" />}

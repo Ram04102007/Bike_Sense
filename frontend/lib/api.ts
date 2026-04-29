@@ -129,6 +129,9 @@ export const getHeatmapData = () =>
   apiFetch<{ area: string; hour: number; demand: number }[]>(`${ML_API}/admin/heatmap`, {}, []);
 
 export const getFleetData         = () => apiFetch<any[]>(`${ML_API}/admin/fleet`, {}, []);
+export const getBikeModels        = () => apiFetch<any[]>(`${ML_API}/admin/fleet/models`, {}, []);
+export const getLiveAlerts        = () => apiFetch<any[]>(`${ML_API}/admin/alerts`, {}, []);
+export const getZoneIntelligence  = () => apiFetch<any[]>(`${ML_API}/admin/zone-intelligence`, {}, []);
 export const getCustomerAnalytics = () => apiFetch<any>(`${ML_API}/admin/customers/analytics`, {}, {});
 export const getMonthlyReport     = () => apiFetch<any[]>(`${ML_API}/admin/reports/monthly`, {}, []);
 export const getPricingRec        = (area: string, hour: number, is_weekend = false) =>

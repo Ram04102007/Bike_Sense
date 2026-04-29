@@ -1,30 +1,47 @@
 "use client";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { motion } from "framer-motion";
 import { Bike, Battery, AlertTriangle, CheckCircle, Wrench, RefreshCw, MapPin } from "lucide-react";
-
-const fleetData = [
-  {area:"Indiranagar",   total:140, available:89, in_use:42, maintenance:9,  low_battery:4,  demand:1.30, rebalance:"Send 8 bikes"},
-  {area:"Koramangala",   total:128, available:72, in_use:48, maintenance:8,  low_battery:6,  demand:1.20, rebalance:"Send 5 bikes"},
-  {area:"Whitefield",    total:115, available:83, in_use:28, maintenance:4,  low_battery:3,  demand:1.10, rebalance:"Receive 4 bikes"},
-  {area:"Marathahalli",  total:100, available:71, in_use:24, maintenance:5,  low_battery:2,  demand:1.00, rebalance:"Balanced"},
-  {area:"HSR Layout",    total:120, available:78, in_use:36, maintenance:6,  low_battery:5,  demand:1.15, rebalance:"Send 6 bikes"},
-  {area:"Jayanagar",     total: 90, available:62, in_use:22, maintenance:6,  low_battery:3,  demand:0.90, rebalance:"Receive 10 bikes"},
-  {area:"Electronic City",total:95, available:68, in_use:22, maintenance:5,  low_battery:2,  demand:0.95, rebalance:"Receive 6 bikes"},
-  {area:"Hebbal",        total: 85, available:58, in_use:21, maintenance:6,  low_battery:2,  demand:0.85, rebalance:"Receive 8 bikes"},
-];
-
-const bikeModels = [
-  {model:"Ather 450X",    count:247, available:162, type:"EV",     avg_battery:78, issues:8,  revenue:"₹4.2L"},
-  {model:"Bounce Infinity",count:198,available:121, type:"EV",     avg_battery:71, issues:12, revenue:"₹3.1L"},
-  {model:"Yulu Move",     count:156, available:112, type:"EV",     avg_battery:84, issues:4,  revenue:"₹1.8L"},
-  {model:"Honda Activa",  count:183, available:124, type:"Scooter",avg_battery:null,issues:9, revenue:"₹2.9L"},
-  {model:"Royal Enfield", count: 87, available:52,  type:"Premium",avg_battery:null,issues:6, revenue:"₹3.5L"},
-  {model:"Rapido Bike",   count:132, available:92,  type:"Budget", avg_battery:null,issues:7, revenue:"₹1.2L"},
-];
+import { getFleetData, getBikeModels } from "@/lib/api";
 
 export default function FleetPage() {
   const [view, setView] = useState<"zones"|"models">("zones");
+  const [fleetData, setFleetData] = useState<any[]>([]);
+  const [bikeModels, setBikeModels] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  const fetchFleet = async () => {
+    setLoading(true);
+    try {
+      const [data, modelsData] = await Promise.all([
+        getFleetData(),
+        getBikeModels()
+      ]);
+      const formatted = data.map((z: any) => {
+        let rebalance = "Balanced";
+        if (z.demand_score > 1.1) {
+          rebalance = `Send ${Math.round((z.demand_score - 1) * 30)} bikes`;
+        } else if (z.demand_score < 0.9) {
+          rebalance = `Receive ${Math.round((1 - z.demand_score) * 30)} bikes`;
+        }
+        return {
+          ...z,
+          demand: z.demand_score,
+          rebalance
+        };
+      });
+      setFleetData(formatted);
+      setBikeModels(modelsData);
+    } catch (error) {
+      console.error("Error fetching fleet data:", error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchFleet();
+  }, []);
 
   const totals = fleetData.reduce((a,z)=>({
     total:a.total+z.total, available:a.available+z.available,
@@ -40,8 +57,8 @@ export default function FleetPage() {
           </h1>
           <p className="text-slate-500 text-sm mt-0.5">Real-time bike availability, health & rebalancing intelligence</p>
         </div>
-        <button className="btn-ghost flex items-center gap-2 text-sm">
-          <RefreshCw className="w-4 h-4" /> Sync Fleet
+        <button onClick={fetchFleet} disabled={loading} className="btn-ghost flex items-center gap-2 text-sm">
+          <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} /> Sync Fleet
         </button>
       </div>
 
@@ -77,7 +94,11 @@ export default function FleetPage() {
 
       {view==="zones" && (
         <div className="space-y-4">
-          {fleetData.map((z,i)=>{
+          {loading ? (
+            <div className="flex justify-center items-center py-20">
+              <div className="w-8 h-8 border-2 border-emerald-500 border-t-transparent rounded-full animate-spin"></div>
+            </div>
+          ) : fleetData.length > 0 ? fleetData.map((z,i)=>{
             const utilPct = Math.round((z.in_use/z.total)*100);
             const availPct = Math.round((z.available/z.total)*100);
             const needsRebalance = z.rebalance!=="Balanced";
@@ -123,7 +144,9 @@ export default function FleetPage() {
                 </div>
               </motion.div>
             );
-          })}
+          }) : (
+            <div className="text-center text-slate-500 py-10">No fleet data available.</div>
+          )}
         </div>
       )}
 
@@ -139,7 +162,15 @@ export default function FleetPage() {
                 </tr>
               </thead>
               <tbody>
-                {bikeModels.map((b,i)=>(
+                {loading ? (
+                  <tr>
+                    <td colSpan={8} className="text-center py-10">
+                      <div className="flex justify-center items-center">
+                        <div className="w-6 h-6 border-2 border-brand-500 border-t-transparent rounded-full animate-spin"></div>
+                      </div>
+                    </td>
+                  </tr>
+                ) : bikeModels.length > 0 ? bikeModels.map((b,i)=>(
                   <motion.tr key={b.model} initial={{opacity:0}} animate={{opacity:1}} transition={{delay:i*0.07}}
                     className="border-b border-white/3 hover:bg-white/2 transition-colors">
                     <td className="py-3 px-3 font-semibold text-white">{b.model}</td>
@@ -172,7 +203,9 @@ export default function FleetPage() {
                       </span>
                     </td>
                   </motion.tr>
-                ))}
+                )) : (
+                  <tr><td colSpan={8} className="text-center py-10 text-slate-500">No bike models found.</td></tr>
+                )}
               </tbody>
             </table>
           </div>

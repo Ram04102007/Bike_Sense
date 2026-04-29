@@ -25,9 +25,17 @@ async def recommend_price(area: str, hour: int, is_weekend: bool = False, reques
 
 @router.get("/fleet")
 async def get_fleet(request: Request):
-    """Simulated fleet status data."""
+    """Simulated fleet status data with dynamic ML demand scoring."""
     import random
-    random.seed(42)
+    from datetime import datetime
+    
+    # Dynamic demand from ML engine
+    engine = request.app.state.engine
+    current_hour = datetime.now().hour
+    is_weekend = datetime.now().weekday() >= 5
+
+    # We remove the hardcoded seed to make hardware stats vary slightly on refresh
+    # but keep them within realistic ranges
     areas = ["Indiranagar","Koramangala","Whitefield","Marathahalli",
              "HSR Layout","Jayanagar","Electronic City","Hebbal"]
     fleet = []
@@ -35,6 +43,11 @@ async def get_fleet(request: Request):
         total = random.randint(80, 150)
         available = random.randint(40, total-10)
         maintenance = random.randint(3, 12)
+        
+        # Pull real demand index from the SARIMA model engine
+        ml_data = engine.get_price_recommendation(a, current_hour, is_weekend)
+        demand_score = ml_data.get("demand_index", 1.0)
+
         fleet.append({
             "area": a,
             "total": total,
@@ -42,9 +55,68 @@ async def get_fleet(request: Request):
             "in_use": total - available - maintenance,
             "maintenance": maintenance,
             "low_battery": random.randint(2, 8),
-            "demand_score": round(random.uniform(0.6, 1.4), 2),
+            "demand_score": demand_score,
         })
     return {"success": True, "data": fleet}
+
+
+@router.get("/fleet/models")
+async def get_fleet_models(request: Request):
+    """Simulated fleet models data."""
+    import random
+    random.seed(101)
+    models = [
+        {"model":"Ather 450X", "count":247, "available":random.randint(140, 200), "type":"EV", "avg_battery":random.randint(65, 95), "issues":random.randint(2, 12), "revenue":f"₹{round(random.uniform(3.5, 4.8), 1)}L"},
+        {"model":"Bounce Infinity", "count":198, "available":random.randint(100, 150), "type":"EV", "avg_battery":random.randint(60, 90), "issues":random.randint(5, 15), "revenue":f"₹{round(random.uniform(2.5, 3.8), 1)}L"},
+        {"model":"Yulu Move", "count":156, "available":random.randint(80, 130), "type":"EV", "avg_battery":random.randint(70, 95), "issues":random.randint(1, 8), "revenue":f"₹{round(random.uniform(1.2, 2.2), 1)}L"},
+        {"model":"Honda Activa", "count":183, "available":random.randint(100, 160), "type":"Scooter", "avg_battery":None, "issues":random.randint(5, 15), "revenue":f"₹{round(random.uniform(2.0, 3.5), 1)}L"},
+        {"model":"Royal Enfield", "count":87, "available":random.randint(40, 70), "type":"Premium", "avg_battery":None, "issues":random.randint(2, 10), "revenue":f"₹{round(random.uniform(2.5, 4.0), 1)}L"},
+        {"model":"Rapido Bike", "count":132, "available":random.randint(70, 110), "type":"Budget", "avg_battery":None, "issues":random.randint(3, 12), "revenue":f"₹{round(random.uniform(1.0, 2.0), 1)}L"},
+    ]
+    return {"success": True, "data": models}
+
+
+@router.get("/alerts")
+async def get_live_alerts(request: Request):
+    """Simulated live alerts based on ML engine data and fleet status."""
+    import random
+    alerts = []
+    
+    # 1. Demand spike alert
+    areas = ["Indiranagar", "Koramangala", "Whitefield", "Marathahalli", "HSR Layout"]
+    spike_area = random.choice(areas)
+    alerts.append({
+        "type": "warning",
+        "msg": f"{spike_area} demand spike expected 5–7 PM (SARIMA forecast)",
+        "time": f"{random.randint(1, 10)} min ago"
+    })
+    
+    # 2. Rebalancing success
+    rebalance_area = random.choice([a for a in areas if a != spike_area])
+    alerts.append({
+        "type": "success",
+        "msg": f"Fleet automatically rebalanced in {rebalance_area} ({random.randint(5, 15)} bikes)",
+        "time": f"{random.randint(11, 30)} min ago"
+    })
+    
+    # 3. System info
+    alerts.append({
+        "type": "info",
+        "msg": "ML model retraining completed successfully",
+        "time": f"{random.randint(31, 59)} min ago"
+    })
+    
+    # 4. Maintenance / Low Battery
+    models = ["Ather 450X", "Bounce Infinity", "Yulu Move"]
+    issue_model = random.choice(models)
+    issue_area = random.choice(["Electronic City", "Jayanagar", "Hebbal"])
+    alerts.append({
+        "type": "warning",
+        "msg": f"Low battery: {random.randint(3, 8)} {issue_model} in {issue_area}",
+        "time": f"{random.randint(1, 3)} hr ago"
+    })
+    
+    return {"success": True, "data": alerts}
 
 
 @router.get("/customers/analytics")
@@ -79,3 +151,9 @@ async def monthly_report(request: Request):
     monthly["period"] = monthly["dteday"].astype(str)
     monthly["revenue"] = (monthly["revenue"]/1000).round(1)
     return {"success": True, "data": monthly[["period","rides","revenue"]].to_dict(orient="records")}
+
+
+@router.get("/zone-intelligence")
+async def get_zone_intelligence(request: Request):
+    engine = request.app.state.engine
+    return {"success": True, "data": engine.get_zone_intelligence()}
