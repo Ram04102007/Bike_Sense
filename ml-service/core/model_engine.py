@@ -258,27 +258,49 @@ class ModelEngine:
         return [{"dt": str(idx.date()), "demand": round(float(v),1)}
                 for idx,v in self._fc_long["mean"].items()]
 
-    def get_heatmap_data(self):
-        """Return hour × location demand matrix."""
+    def get_heatmap_data(self, target_date: str = None):
+        """Return hour × location demand matrix. If target_date is given, predicts for that date."""
         df = self.df
-        if "area_name" in df.columns and df["area_name"].nunique()>1:
-            heat = df.groupby(["area_name","hr"])["cnt"].mean().unstack("hr").fillna(0)
+        area_weights = {"Indiranagar":1.3,"Koramangala":1.2,"Whitefield":1.1,
+                        "Marathahalli":1.0,"HSR Layout":1.15,"Jayanagar":0.9,
+                        "Electronic City":0.95,"Hebbal":0.85}
+        total_w = sum(area_weights.values())
+
+        heat = {}
+        if target_date:
+            try:
+                for area, w in area_weights.items():
+                    heat[area] = {}
+                    for hr in range(24):
+                        # Use predict method to get base_agg for that date/time
+                        pred = self.predict(target_date, f"{hr:02d}:00")
+                        base_city_demand = pred["expected_demand"]
+                        zone_demand = base_city_demand * (w / total_w)
+                        heat[area][hr] = round(zone_demand, 1)
+                heat = pd.DataFrame(heat).T
+            except Exception as e:
+                print(f"Error predicting heatmap for {target_date}: {e}")
+                heat = pd.DataFrame()
         else:
+            if "area_name" in df.columns and df["area_name"].nunique()>1:
+                heat = df.groupby(["area_name","hr"])["cnt"].mean().unstack("hr").fillna(0)
+            else:
             # Decompose using area weights
             area_weights = {"Indiranagar":1.3,"Koramangala":1.2,"Whitefield":1.1,
                             "Marathahalli":1.0,"HSR Layout":1.15,"Jayanagar":0.9,
                             "Electronic City":0.95,"Hebbal":0.85}
             total_w = sum(area_weights.values())
             hrly = df.groupby("hr")["cnt"].mean()
-            heat = {}
             for area, w in area_weights.items():
                 heat[area] = {hr: round(v*w/total_w,1) for hr,v in hrly.items()}
             heat = pd.DataFrame(heat).T
+            
         result = []
-        for area in heat.index:
-            for hr in range(24):
-                val = float(heat.loc[area, hr]) if hr in heat.columns else 0
-                result.append({"area":area,"hour":hr,"demand":round(val,1)})
+        if not heat.empty:
+            for area in heat.index:
+                for hr in range(24):
+                    val = float(heat.loc[area, hr]) if hr in heat.columns else 0
+                    result.append({"area":area,"hour":hr,"demand":round(val,1)})
         return result
 
     def get_revenue_data(self):

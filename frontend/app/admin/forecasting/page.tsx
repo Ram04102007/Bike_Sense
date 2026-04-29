@@ -105,13 +105,32 @@ export default function ForecastingPage() {
   const [isLive, setIsLive]     = useState(false);
   const [modelInfo, setModelInfo] = useState({ shortAic: "—", dailyAic: "—" });
 
+  const [heatmapDate, setHeatmapDate] = useState("");
+  const [heatmapLoading, setHeatmapLoading] = useState(false);
+
+  const fetchHeatmap = async (dateStr: string) => {
+    setHeatmapLoading(true);
+    try {
+      const heatRaw = await getHeatmapData(dateStr || undefined);
+      if (heatRaw.length > 0) setHeatmapData(buildHeatmap(heatRaw));
+    } catch (e) {
+      console.error(e);
+    } finally {
+      setHeatmapLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    if (!loading) fetchHeatmap(heatmapDate);
+  }, [heatmapDate]);
+
   const loadData = async () => {
     setLoading(true);
     try {
       const [shortRaw, dailyRaw, heatRaw] = await Promise.all([
         getShortForecast(),
         getDailyForecast(),
-        getHeatmapData(),
+        getHeatmapData(heatmapDate || undefined),
       ]);
       const hourly = toHourlyChart(shortRaw);
       setHourlyData(hourly);
@@ -245,8 +264,19 @@ export default function ForecastingPage() {
       <div className="grid lg:grid-cols-2 gap-6">
         {/* Heatmap — from /admin/heatmap endpoint */}
         <div className="glass rounded-xl p-6 overflow-hidden">
-          <h3 className="font-display font-semibold text-white mb-4">Demand Heatmap · Hour × Zone</h3>
-          {loading
+          <div className="flex items-center justify-between mb-4">
+            <h3 className="font-display font-semibold text-white">Demand Heatmap · Hour × Zone</h3>
+            <div className="flex items-center gap-2">
+              <span className="text-xs text-slate-500">Date:</span>
+              <input
+                type="date"
+                value={heatmapDate}
+                onChange={e => setHeatmapDate(e.target.value)}
+                className="input-dark text-xs py-1 px-2 h-7 rounded bg-white/5 border border-white/10 text-slate-300"
+              />
+            </div>
+          </div>
+          {loading || heatmapLoading
             ? <Skeleton className="h-48" />
             : (() => {
                 // Use real API data when available, otherwise the formula fallback

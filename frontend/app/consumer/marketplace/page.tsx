@@ -1,37 +1,64 @@
 "use client";
-import { useState } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { Bike, Battery, Star, MapPin, Filter, Search, Zap, ChevronRight } from "lucide-react";
+import { Bike, Battery, Star, MapPin, Filter, Search, Zap, ChevronRight, RefreshCw, WifiOff } from "lucide-react";
+import { getBikes, type BikeItem } from "@/lib/api";
 
-const ALL_BIKES = [
-  {id:"b1",name:"Ather 450X",type:"EV",area:"Indiranagar",price:81,rating:4.8,available:true,battery:92,range:85,desc:"Premium EV scooter with 85km range. Smart dashboard & regenerative braking.",color:"#6366f1"},
-  {id:"b2",name:"Bounce Infinity",type:"EV",area:"Koramangala",price:69,rating:4.5,available:true,battery:76,range:70,desc:"Mid-range EV with swappable battery. Lightweight and easy to manoeuvre.",color:"#00f5ff"},
-  {id:"b3",name:"Yulu Move",type:"EV",area:"Whitefield",price:45,rating:4.2,available:true,battery:88,range:40,desc:"Compact city EV. Perfect for short commutes. Lock/unlock via app.",color:"#00ff88"},
-  {id:"b4",name:"Honda Activa",type:"Scooter",area:"HSR Layout",price:55,rating:4.6,available:true,battery:null,range:null,desc:"India's most trusted scooter. Reliable, fuel-efficient, comfortable ride.",color:"#f59e0b"},
-  {id:"b5",name:"Royal Enfield",type:"Premium",area:"Marathahalli",price:120,rating:4.9,available:false,battery:null,range:null,desc:"Classic 350cc. Weekend warrior. Book in advance — very popular!",color:"#a78bfa"},
-  {id:"b6",name:"Rapido Bike",type:"Budget",area:"Jayanagar",price:38,rating:4.1,available:true,battery:null,range:null,desc:"Budget-friendly. Get around without breaking the bank.",color:"#94a3b8"},
-  {id:"b7",name:"Ather 450X",type:"EV",area:"Electronic City",price:76,rating:4.7,available:true,battery:65,range:80,desc:"Same great Ather 450X, fresh charge. Available now in E-City.",color:"#6366f1"},
-  {id:"b8",name:"Bounce Infinity",type:"EV",area:"Hebbal",price:65,rating:4.4,available:true,battery:81,range:68,desc:"Great value EV. Hebbal station, swap battery when needed.",color:"#00f5ff"},
-  {id:"b9",name:"Honda Activa",type:"Scooter",area:"Indiranagar",price:58,rating:4.5,available:true,battery:null,range:null,desc:"Second Activa unit in Indiranagar. Ready to go.",color:"#f59e0b"},
-  {id:"b10",name:"Yulu Move",type:"EV",area:"HSR Layout",price:45,rating:4.3,available:true,battery:95,range:40,desc:"Fully charged Yulu in HSR. Cheapest EV option in the zone.",color:"#00ff88"},
-];
+// ─── Bike metadata not returned by the API (colour, emoji, desc) ─────────────
+const BIKE_META: Record<string, { color: string; emoji: string; desc: string }> = {
+  "Ather 450X":     { color: "#6366f1", emoji: "⚡", desc: "Premium EV scooter with smart dashboard & regenerative braking." },
+  "Bounce Infinity":{ color: "#00f5ff", emoji: "⚡", desc: "Mid-range EV with swappable battery. Lightweight and easy to manoeuvre." },
+  "Yulu Move":      { color: "#00ff88", emoji: "⚡", desc: "Compact city EV. Perfect for short commutes. Lock/unlock via app." },
+  "Honda Activa":   { color: "#f59e0b", emoji: "🏍️", desc: "India's most trusted scooter. Reliable, fuel-efficient, comfortable ride." },
+  "Royal Enfield":  { color: "#a78bfa", emoji: "👑", desc: "Classic 350cc. Weekend warrior. Book in advance — very popular!" },
+  "Rapido Bike":    { color: "#94a3b8", emoji: "💰", desc: "Budget-friendly. Get around without breaking the bank." },
+};
+const getMeta = (name: string) =>
+  BIKE_META[name] ?? { color: "#6366f1", emoji: "🚲", desc: "Available for rent in Bangalore." };
 
-const TYPES = ["All","EV","Scooter","Premium","Budget"];
-const AREAS = ["All","Indiranagar","Koramangala","Whitefield","Marathahalli","HSR Layout","Jayanagar","Electronic City","Hebbal"];
+const TYPES = ["All", "EV", "Scooter", "Premium", "Budget"];
+const AREAS = ["All", "Indiranagar", "Koramangala", "Whitefield", "Marathahalli", "HSR Layout", "Jayanagar", "Electronic City", "Hebbal"];
 
-function BikeCard({bike}: {bike: typeof ALL_BIKES[0]}) {
-  const [booked, setBooked] = useState(false);
+// ─── Skeleton card ────────────────────────────────────────────────────────────
+function SkeletonCard() {
   return (
-    <motion.div layout initial={{opacity:0,scale:0.95}} animate={{opacity:1,scale:1}}
-      className={`glass rounded-2xl overflow-hidden hover-lift transition-all ${!bike.available?"opacity-60":""}`}>
-      {/* Colour strip */}
-      <div className="h-1.5" style={{background:`linear-gradient(90deg, ${bike.color}, transparent)`}} />
+    <div className="glass rounded-2xl overflow-hidden animate-pulse">
+      <div className="h-1.5 bg-white/10" />
+      <div className="p-5 space-y-3">
+        <div className="flex gap-3">
+          <div className="w-12 h-12 rounded-xl bg-white/5" />
+          <div className="flex-1 space-y-2">
+            <div className="h-3 bg-white/5 rounded w-2/3" />
+            <div className="h-2 bg-white/5 rounded w-1/2" />
+          </div>
+          <div className="w-14 h-8 bg-white/5 rounded" />
+        </div>
+        <div className="flex gap-2">
+          <div className="h-5 w-10 bg-white/5 rounded-full" />
+          <div className="h-5 w-14 bg-white/5 rounded-full" />
+          <div className="h-5 w-16 bg-white/5 rounded-full" />
+        </div>
+        <div className="h-8 bg-white/5 rounded w-full" />
+        <div className="h-10 bg-white/5 rounded-lg w-full" />
+      </div>
+    </div>
+  );
+}
+
+// ─── Bike Card ────────────────────────────────────────────────────────────────
+function BikeCard({ bike }: { bike: BikeItem }) {
+  const [booked, setBooked] = useState(false);
+  const meta = getMeta(bike.name);
+  return (
+    <motion.div layout initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }}
+      className={`glass rounded-2xl overflow-hidden hover-lift transition-all ${!bike.available ? "opacity-60" : ""}`}>
+      <div className="h-1.5" style={{ background: `linear-gradient(90deg, ${meta.color}, transparent)` }} />
       <div className="p-5">
         <div className="flex items-start justify-between mb-3">
           <div className="flex items-center gap-3">
             <div className="w-12 h-12 rounded-xl flex items-center justify-center text-2xl"
-              style={{background:`${bike.color}15`, border:`1px solid ${bike.color}25`}}>
-              {bike.type==="EV"?"⚡":bike.type==="Premium"?"👑":bike.type==="Budget"?"💰":"🏍️"}
+              style={{ background: `${meta.color}15`, border: `1px solid ${meta.color}25` }}>
+              {meta.emoji}
             </div>
             <div>
               <div className="font-display font-semibold text-white">{bike.name}</div>
@@ -41,7 +68,7 @@ function BikeCard({bike}: {bike: typeof ALL_BIKES[0]}) {
             </div>
           </div>
           <div className="text-right">
-            <div className="font-display font-bold text-xl text-white">₹{bike.price}<span className="text-xs text-slate-500 font-normal">/hr</span></div>
+            <div className="font-display font-bold text-xl text-white">₹{bike.price_per_hr}<span className="text-xs text-slate-500 font-normal">/hr</span></div>
             <div className="flex items-center gap-1 text-xs text-amber-400 justify-end">
               <Star className="w-3 h-3 fill-amber-400" />{bike.rating}
             </div>
@@ -51,25 +78,25 @@ function BikeCard({bike}: {bike: typeof ALL_BIKES[0]}) {
         {/* Tags */}
         <div className="flex flex-wrap gap-1.5 mb-3">
           <span className="text-xs px-2 py-0.5 rounded-full border"
-            style={{color:bike.color, borderColor:`${bike.color}30`, background:`${bike.color}10`}}>
+            style={{ color: meta.color, borderColor: `${meta.color}30`, background: `${meta.color}10` }}>
             {bike.type}
           </span>
-          {bike.battery && (
-            <span className={`flex items-center gap-1 text-xs px-2 py-0.5 rounded-full border ${bike.battery>70?"bg-emerald-500/10 text-emerald-400 border-emerald-500/20":"bg-amber-500/10 text-amber-400 border-amber-500/20"}`}>
+          {bike.battery != null && (
+            <span className={`flex items-center gap-1 text-xs px-2 py-0.5 rounded-full border ${bike.battery > 70 ? "bg-emerald-500/10 text-emerald-400 border-emerald-500/20" : "bg-amber-500/10 text-amber-400 border-amber-500/20"}`}>
               <Battery className="w-3 h-3" />{bike.battery}%
             </span>
           )}
-          {bike.range && (
+          {bike.range_km != null && (
             <span className="text-xs px-2 py-0.5 rounded-full bg-slate-700/50 text-slate-400 border border-slate-600/30">
-              {bike.range}km range
+              {bike.range_km}km range
             </span>
           )}
-          <span className={`text-xs px-2 py-0.5 rounded-full ${bike.available?"bg-emerald-500/10 text-emerald-400 border border-emerald-500/20":"bg-red-500/10 text-red-400 border border-red-500/20"}`}>
-            {bike.available?"Available":"Unavailable"}
+          <span className={`text-xs px-2 py-0.5 rounded-full ${bike.available ? "bg-emerald-500/10 text-emerald-400 border border-emerald-500/20" : "bg-red-500/10 text-red-400 border border-red-500/20"}`}>
+            {bike.available ? "Available" : "Unavailable"}
           </span>
         </div>
 
-        <p className="text-xs text-slate-500 leading-relaxed mb-4">{bike.desc}</p>
+        <p className="text-xs text-slate-500 leading-relaxed mb-4">{meta.desc}</p>
 
         <button
           disabled={!bike.available}
@@ -86,28 +113,73 @@ function BikeCard({bike}: {bike: typeof ALL_BIKES[0]}) {
   );
 }
 
+// ─── Main Page ────────────────────────────────────────────────────────────────
 export default function MarketplacePage() {
+  const [bikes,      setBikes]      = useState<BikeItem[]>([]);
+  const [loading,    setLoading]    = useState(true);
+  const [error,      setError]      = useState<string | null>(null);
+  const [isLive,     setIsLive]     = useState(false);
   const [typeFilter, setTypeFilter] = useState("All");
   const [areaFilter, setAreaFilter] = useState("All");
-  const [search, setSearch] = useState("");
-  const [sortBy, setSortBy] = useState<"price"|"rating">("price");
-  const [availOnly, setAvailOnly] = useState(false);
+  const [search,     setSearch]     = useState("");
+  const [sortBy,     setSortBy]     = useState<"price" | "rating">("price");
+  const [availOnly,  setAvailOnly]  = useState(false);
 
-  const filtered = ALL_BIKES
-    .filter(b => typeFilter==="All" || b.type===typeFilter)
-    .filter(b => areaFilter==="All" || b.area===areaFilter)
+  const fetchBikes = useCallback(async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      const data = await getBikes();
+      setBikes(data);
+      // Detect live data: real backend returns non-round ratings
+      setIsLive(data.length > 0 && data[0].rating % 1 !== 0 || data.length > 8);
+    } catch {
+      setError("Could not reach backend. Showing cached data.");
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => { fetchBikes(); }, [fetchBikes]);
+
+  // Client-side filter & sort applied on fetched data
+  const filtered = bikes
+    .filter(b => typeFilter === "All" || b.type === typeFilter)
+    .filter(b => areaFilter === "All" || b.area === areaFilter)
     .filter(b => !availOnly || b.available)
     .filter(b => !search || b.name.toLowerCase().includes(search.toLowerCase()) || b.area.toLowerCase().includes(search.toLowerCase()))
-    .sort((a,b) => sortBy==="price" ? a.price-b.price : b.rating-a.rating);
+    .sort((a, b) => sortBy === "price" ? a.price_per_hr - b.price_per_hr : b.rating - a.rating);
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="font-display font-bold text-2xl text-white flex items-center gap-2">
-          <Bike className="w-6 h-6 text-brand-400" /> Bike Marketplace
-        </h1>
-        <p className="text-slate-500 text-sm mt-0.5">{filtered.length} bikes found across Bangalore</p>
+      {/* Header */}
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="font-display font-bold text-2xl text-white flex items-center gap-2">
+            <Bike className="w-6 h-6 text-brand-400" /> Bike Marketplace
+          </h1>
+          <p className="text-slate-500 text-sm mt-0.5">
+            {loading ? "Loading bikes..." : `${filtered.length} bikes found across Bangalore`}
+          </p>
+        </div>
+        <div className="flex items-center gap-2">
+          <span className={`badge-${isLive ? "success" : "info"} flex items-center gap-1.5`}>
+            <span className={`w-1.5 h-1.5 rounded-full ${isLive ? "bg-green-400 animate-pulse" : "bg-blue-400"}`} />
+            {isLive ? "Live" : "Demo"}
+          </span>
+          <button onClick={fetchBikes} disabled={loading} title="Refresh bikes from backend"
+            className="glass rounded-lg px-3 py-2 text-slate-400 hover:text-white transition-colors disabled:opacity-50">
+            <RefreshCw className={`w-4 h-4 ${loading ? "animate-spin" : ""}`} />
+          </button>
+        </div>
       </div>
+
+      {/* Error banner */}
+      {error && (
+        <div className="flex items-center gap-2 px-4 py-2.5 bg-amber-500/10 border border-amber-500/20 rounded-lg text-amber-300 text-sm">
+          <WifiOff className="w-4 h-4 shrink-0" /> {error}
+        </div>
+      )}
 
       {/* Filters */}
       <div className="glass rounded-xl p-4 space-y-3">
@@ -115,15 +187,15 @@ export default function MarketplacePage() {
           <Filter className="w-4 h-4 text-slate-400 shrink-0" />
           <div className="relative flex-1">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-500" />
-            <input value={search} onChange={e=>setSearch(e.target.value)}
+            <input value={search} onChange={e => setSearch(e.target.value)}
               placeholder="Search bikes or areas..."
               className="input-dark w-full pl-9 py-1.5 text-sm" />
           </div>
-          <button onClick={()=>setAvailOnly(!availOnly)}
-            className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all shrink-0 ${availOnly?"bg-emerald-500/20 text-emerald-400 border border-emerald-500/30":"glass text-slate-400 hover:text-white"}`}>
+          <button onClick={() => setAvailOnly(!availOnly)}
+            className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all shrink-0 ${availOnly ? "bg-emerald-500/20 text-emerald-400 border border-emerald-500/30" : "glass text-slate-400 hover:text-white"}`}>
             ✓ Available Only
           </button>
-          <select value={sortBy} onChange={e=>setSortBy(e.target.value as any)} className="input-dark text-sm py-1.5 shrink-0">
+          <select value={sortBy} onChange={e => setSortBy(e.target.value as any)} className="input-dark text-sm py-1.5 shrink-0">
             <option value="price">Sort: Price</option>
             <option value="rating">Sort: Rating</option>
           </select>
@@ -131,19 +203,19 @@ export default function MarketplacePage() {
 
         {/* Type pills */}
         <div className="flex gap-2 flex-wrap">
-          {TYPES.map(t=>(
-            <button key={t} onClick={()=>setTypeFilter(t)}
-              className={`px-3 py-1 rounded-full text-xs font-medium transition-all ${typeFilter===t?"bg-brand-500 text-white":"glass-light text-slate-400 hover:text-white"}`}>
-              {t==="EV"?"⚡ EV":t==="Premium"?"👑 Premium":t==="Budget"?"💰 Budget":t==="Scooter"?"🛵 Scooter":"All"}
+          {TYPES.map(t => (
+            <button key={t} onClick={() => setTypeFilter(t)}
+              className={`px-3 py-1 rounded-full text-xs font-medium transition-all ${typeFilter === t ? "bg-brand-500 text-white" : "glass-light text-slate-400 hover:text-white"}`}>
+              {t === "EV" ? "⚡ EV" : t === "Premium" ? "👑 Premium" : t === "Budget" ? "💰 Budget" : t === "Scooter" ? "🛵 Scooter" : "All"}
             </button>
           ))}
         </div>
 
         {/* Area pills */}
         <div className="flex gap-2 flex-wrap">
-          {AREAS.map(a=>(
-            <button key={a} onClick={()=>setAreaFilter(a)}
-              className={`px-3 py-1 rounded-full text-xs font-medium transition-all ${areaFilter===a?"bg-brand-500 text-white":"glass-light text-slate-400 hover:text-white"}`}>
+          {AREAS.map(a => (
+            <button key={a} onClick={() => setAreaFilter(a)}
+              className={`px-3 py-1 rounded-full text-xs font-medium transition-all ${areaFilter === a ? "bg-brand-500 text-white" : "glass-light text-slate-400 hover:text-white"}`}>
               {a}
             </button>
           ))}
@@ -152,12 +224,16 @@ export default function MarketplacePage() {
 
       {/* Grid */}
       <AnimatePresence mode="popLayout">
-        {filtered.length > 0 ? (
+        {loading ? (
+          <motion.div layout className="grid sm:grid-cols-2 xl:grid-cols-3 gap-4">
+            {Array.from({ length: 6 }).map((_, i) => <SkeletonCard key={i} />)}
+          </motion.div>
+        ) : filtered.length > 0 ? (
           <motion.div layout className="grid sm:grid-cols-2 xl:grid-cols-3 gap-4">
             {filtered.map(bike => <BikeCard key={bike.id} bike={bike} />)}
           </motion.div>
         ) : (
-          <motion.div initial={{opacity:0}} animate={{opacity:1}} className="glass rounded-2xl p-16 text-center">
+          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="glass rounded-2xl p-16 text-center">
             <Bike className="w-12 h-12 text-slate-600 mx-auto mb-3" />
             <div className="text-slate-400 font-medium">No bikes found</div>
             <div className="text-slate-600 text-sm mt-1">Try adjusting your filters</div>

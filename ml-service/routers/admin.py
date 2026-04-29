@@ -12,9 +12,9 @@ async def get_revenue(request: Request):
 
 
 @router.get("/heatmap")
-async def get_heatmap(request: Request):
+async def get_heatmap(date: Optional[str] = None, request: Request = None):
     engine = request.app.state.engine
-    return {"success": True, "data": engine.get_heatmap_data()}
+    return {"success": True, "data": engine.get_heatmap_data(date)}
 
 
 @router.get("/pricing/recommend")

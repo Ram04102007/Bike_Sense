@@ -125,8 +125,10 @@ export const getAdminRevenue = () =>
     peak_hour: 8, monthly_rides: 2109, occupancy_pct: 73, active_bikes: 847, repeat_rate: 68.4,
   });
 
-export const getHeatmapData = () =>
-  apiFetch<{ area: string; hour: number; demand: number }[]>(`${ML_API}/admin/heatmap`, {}, []);
+export const getHeatmapData = (date?: string) => {
+  const url = date ? `${ML_API}/admin/heatmap?date=${date}` : `${ML_API}/admin/heatmap`;
+  return apiFetch<{ area: string; hour: number; demand: number }[]>(url, {}, []);
+};
 
 export const getFleetData         = () => apiFetch<any[]>(`${ML_API}/admin/fleet`, {}, []);
 export const getBikeModels        = () => apiFetch<any[]>(`${ML_API}/admin/fleet/models`, {}, []);
@@ -147,3 +149,50 @@ export const getBikes = (area?: string, type?: string) =>
 export const getBestTime        = (area?: string) => apiFetch<any>(`${ML_API}/consumer/best-time${area ? `?area=${encodeURIComponent(area)}` : ""}`, {}, {});
 export const getRecommendations = (area?: string) => apiFetch<any>(`${ML_API}/consumer/recommendations${area ? `?area=${encodeURIComponent(area)}` : ""}`, {}, {});
 export const getPriceTrend      = () => apiFetch<{ dt: string; price: number; demand: number }[]>(`${ML_API}/consumer/price-trend`, {}, []);
+
+// ─── New Dynamic Consumer APIs ────────────────────────────────────────────────
+export interface HourlyPricePoint {
+  hour: number;
+  hour_label: string;
+  price: number;
+  demand: number;
+  demand_label: string;
+  surge: number;
+}
+
+export interface WeeklyDayForecast {
+  day: string;
+  price: number;
+  demand: number;
+  demand_label: string;
+  surge: number;
+}
+
+// Fallback: formula-based 24-hour static schedule (matches old hardcoded logic)
+const mockHourlyPricing = (): HourlyPricePoint[] =>
+  Array.from({ length: 24 }, (_, h) => {
+    const isPeak = (h >= 7 && h <= 9) || (h >= 17 && h <= 20);
+    const isMid  = h >= 10 && h <= 15;
+    const surge  = isPeak ? 1.25 : isMid ? 1.0 : h < 6 || h > 22 ? 1.0 : 1.08;
+    return {
+      hour: h, hour_label: `${h.toString().padStart(2, "0")}:00`,
+      price: parseFloat((65 * surge).toFixed(2)), demand: 0,
+      demand_label: isPeak ? "High" : "Moderate", surge,
+    };
+  });
+
+// Fallback: formula-based weekly schedule
+const mockWeeklyForecast = (): WeeklyDayForecast[] =>
+  [
+    { day: "Mon", price: 70.2,  demand: 0, demand_label: "Moderate", surge: 1.08 },
+    { day: "Tue", price: 65,    demand: 0, demand_label: "Low",      surge: 1.00 },
+    { day: "Wed", price: 65,    demand: 0, demand_label: "Low",      surge: 1.00 },
+    { day: "Thu", price: 70.2,  demand: 0, demand_label: "Moderate", surge: 1.08 },
+    { day: "Fri", price: 76,    demand: 0, demand_label: "High",     surge: 1.17 },
+    { day: "Sat", price: 81.25, demand: 0, demand_label: "Very High",surge: 1.25 },
+    { day: "Sun", price: 76,    demand: 0, demand_label: "High",     surge: 1.17 },
+  ];
+
+export const getHourlyPricing    = () => apiFetch<HourlyPricePoint[]>(`${ML_API}/consumer/hourly-pricing`, {}, mockHourlyPricing());
+export const getWeeklyDayForecast = () => apiFetch<WeeklyDayForecast[]>(`${ML_API}/consumer/weekly-forecast`, {}, mockWeeklyForecast());
+

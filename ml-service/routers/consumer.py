@@ -1,7 +1,8 @@
-"""Consumer endpoints — bikes, recommendations, best time."""
+"""Consumer endpoints — bikes, recommendations, best time, hourly pricing, weekly forecast."""
 from fastapi import APIRouter, Request
 from typing import Optional
 import random
+from datetime import datetime, timedelta
 
 router = APIRouter()
 
@@ -88,3 +89,77 @@ async def price_trend(request: Request):
         surge = engine.compute_surge(agg)
         prices.append({"dt":s["dt"],"price":round(65.0*surge,2),"demand":s["demand"]})
     return {"success": True, "data": prices}
+
+
+@router.get("/hourly-pricing")
+async def hourly_pricing(request: Request):
+    """Return 24-hour price & demand profile derived from SARIMA hourly model."""
+    engine = request.app.state.engine
+    hp = engine.hourly_profile          # pd.Series indexed by hour (0-23)
+    hp_max = float(hp.max())
+    result = []
+    for hr in range(24):
+        avg_demand = float(hp.get(hr, hp.mean()))
+        surge = engine.compute_surge(avg_demand)
+        price = round(65.0 * surge, 2)
+        # demand label
+        p33 = float(engine.hourly_ts["cnt"].quantile(0.33))
+        p66 = float(engine.hourly_ts["cnt"].quantile(0.66))
+        p90 = float(engine.hourly_ts["cnt"].quantile(0.90))
+        if avg_demand < p33:   label = "Low"
+        elif avg_demand < p66: label = "Moderate"
+        elif avg_demand < p90: label = "High"
+        else:                  label = "Very High"
+        result.append({
+            "hour": hr,
+            "hour_label": f"{hr:02d}:00",
+            "price": price,
+            "demand": round(avg_demand, 1),
+            "demand_label": label,
+            "surge": surge,
+        })
+    return {"success": True, "data": result}
+
+
+@router.get("/weekly-forecast")
+async def weekly_forecast(request: Request):
+    """Return 7-day SARIMA-backed price forecast aggregated by day-of-week."""
+    engine = request.app.state.engine
+    fc = engine.get_short_forecast()          # list of {dt, demand} — next 7×24 hrs
+    day_names = ["Mon","Tue","Wed","Thu","Fri","Sat","Sun"]
+    buckets: dict = {}
+
+    for point in fc:
+        dt = datetime.fromisoformat(point["dt"])
+        # weekday() returns 0=Mon … 6=Sun
+        key = day_names[dt.weekday()]
+        if key not in buckets:
+            buckets[key] = {"demand_sum": 0.0, "count": 0}
+        buckets[key]["demand_sum"] += point["demand"]
+        buckets[key]["count"]      += 1
+
+    result = []
+    p33 = float(engine.hourly_ts["cnt"].quantile(0.33))
+    p66 = float(engine.hourly_ts["cnt"].quantile(0.66))
+    p90 = float(engine.hourly_ts["cnt"].quantile(0.90))
+
+    for day in day_names:
+        if day in buckets:
+            avg_demand = buckets[day]["demand_sum"] / buckets[day]["count"]
+        else:
+            avg_demand = float(engine.hourly_profile.mean())
+        surge = engine.compute_surge(avg_demand)
+        price = round(65.0 * surge, 2)
+        if avg_demand < p33:   demand_label = "Low"
+        elif avg_demand < p66: demand_label = "Moderate"
+        elif avg_demand < p90: demand_label = "High"
+        else:                  demand_label = "Very High"
+        result.append({
+            "day": day,
+            "price": price,
+            "demand": round(avg_demand, 1),
+            "demand_label": demand_label,
+            "surge": surge,
+        })
+    return {"success": True, "data": result}
+

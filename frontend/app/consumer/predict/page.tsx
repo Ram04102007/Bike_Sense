@@ -1,5 +1,5 @@
 "use client";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   AreaChart, Area, XAxis, YAxis,
@@ -9,7 +9,10 @@ import {
   Zap, Clock, TrendingDown, Bike, AlertTriangle, CheckCircle,
   Sparkles, WifiOff, RefreshCw,
 } from "lucide-react";
-import { predictDemand, type PredictionResult } from "@/lib/api";
+import {
+  predictDemand, getHourlyPricing, getWeeklyDayForecast,
+  type PredictionResult, type HourlyPricePoint, type WeeklyDayForecast,
+} from "@/lib/api";
 
 const AREAS  = ["Indiranagar","Koramangala","Whitefield","Marathahalli","HSR Layout","Jayanagar","Electronic City","Hebbal"];
 const MODELS = ["Ather 450X","Bounce Infinity","Yulu Move","Rapido Bike","Royal Enfield","Honda Activa"];
@@ -19,23 +22,6 @@ const BASE_PRICES: Record<string, number> = {
   "Ather 450X": 81, "Bounce Infinity": 69, "Yulu Move": 45,
   "Rapido Bike": 38, "Royal Enfield": 120, "Honda Activa": 55,
 };
-
-// Static hourly price schedule (used for the "Today's Pricing" chart — always shown)
-const hourlyForecast = Array.from({ length: 24 }, (_, h) => ({
-  hour: `${h.toString().padStart(2, "00")}:00`,
-  price: h < 6 || h > 22 ? 65 : (h >= 7 && h <= 9) || (h >= 17 && h <= 20) ? 81.25 : h >= 10 && h <= 15 ? 65 : 70.2,
-  demand: Math.round(200 + Math.exp(-0.5 * ((h - 8) / 2.5) ** 2) * 400 + Math.exp(-0.5 * ((h - 18) / 2.5) ** 2) * 300),
-}));
-
-const weeklyForecast = [
-  { day: "Mon", price: 70.2, demand: "Moderate" },
-  { day: "Tue", price: 65,   demand: "Low" },
-  { day: "Wed", price: 65,   demand: "Low" },
-  { day: "Thu", price: 70.2, demand: "Moderate" },
-  { day: "Fri", price: 76,   demand: "High" },
-  { day: "Sat", price: 81.25,demand: "Peak" },
-  { day: "Sun", price: 76,   demand: "High" },
-];
 
 function ChartTooltip({ active, payload, label }: any) {
   if (!active || !payload?.length) return null;
@@ -53,38 +39,62 @@ function ChartTooltip({ active, payload, label }: any) {
   );
 }
 
+function Skeleton({ className = "" }: { className?: string }) {
+  return <div className={`animate-pulse bg-white/5 rounded-lg ${className}`} />;
+}
+
 // ─── Main Page ────────────────────────────────────────────────────────────────
 export default function PredictorPage() {
   const [form, setForm] = useState({
-    area: "Indiranagar",
-    model: "Ather 450X",
-    date: "",
-    time: "09:00",
-    duration: 2,
+    area: "Indiranagar", model: "Ather 450X", date: "", time: "09:00", duration: 2,
   });
-  const [result, setResult]   = useState<PredictionResult | null>(null);
-  const [loading, setLoading] = useState(false);
-  const [isLive,  setIsLive]  = useState<boolean | null>(null); // null = not yet tried
-  const [error,   setError]   = useState<string | null>(null);
-  const [history, setHistory] = useState<Array<PredictionResult & { id: number; duration: number; model: string; area: string }>>([]);
+  const [result,   setResult]   = useState<PredictionResult | null>(null);
+  const [loading,  setLoading]  = useState(false);
+  const [isLive,   setIsLive]   = useState<boolean | null>(null);
+  const [error,    setError]    = useState<string | null>(null);
+  const [history,  setHistory]  = useState<Array<PredictionResult & { id: number; duration: number; model: string; area: string }>>([]);
 
+  // ── Chart data — fetched from backend ──────────────────────────────────────
+  const [hourlyData,  setHourlyData]  = useState<HourlyPricePoint[]>([]);
+  const [weeklyData,  setWeeklyData]  = useState<WeeklyDayForecast[]>([]);
+  const [chartsLoading, setChartsLoading] = useState(true);
+  const [chartsLive,    setChartsLive]    = useState(false);
+
+  const loadCharts = async () => {
+    setChartsLoading(true);
+    try {
+      const [hourly, weekly] = await Promise.all([getHourlyPricing(), getWeeklyDayForecast()]);
+      setHourlyData(hourly);
+      setWeeklyData(weekly);
+      // Detect live: real SARIMA produces non-standard prices (not exactly 65/70.2/81.25)
+      const liveDetected = hourly.some(h => h.price !== 65 && h.price !== 70.2 && h.price !== 81.25);
+      setChartsLive(liveDetected);
+    } catch {
+      // fallback already handled inside apiFetch
+    } finally {
+      setChartsLoading(false);
+    }
+  };
+
+  useEffect(() => { loadCharts(); }, []);
+
+  // ── Peak price from live data for reference lines ──────────────────────────
+  const peakPrice  = hourlyData.length ? Math.max(...hourlyData.map(h => h.price)) : 81.25;
+  const stdPrice   = hourlyData.length ? Math.min(...hourlyData.map(h => h.price)) : 65;
+  const cheapestDay = weeklyData.length
+    ? weeklyData.reduce((a, b) => a.price < b.price ? a : b)
+    : null;
+
+  // ── Prediction ─────────────────────────────────────────────────────────────
   const predict = async () => {
     setLoading(true);
     setError(null);
     try {
-      // Use today if no date selected
       const date = form.date || new Date().toISOString().split("T")[0];
-      const res = await predictDemand({
-        date,
-        time:       form.time,
-        location:   form.area,
-        bike_model: form.model,
-      });
+      const res = await predictDemand({ date, time: form.time, location: form.area, bike_model: form.model });
 
-      // The ML engine returns city-level demand. We scale price by bike model base.
       const baseP  = BASE_PRICES[form.model] ?? 65;
       const scaled = parseFloat((baseP * res.surge_multiplier).toFixed(2));
-
       const enriched: PredictionResult = {
         ...res,
         predicted_price: scaled,
@@ -92,38 +102,47 @@ export default function PredictorPage() {
         savings_vs_peak: parseFloat((baseP * 1.25 - scaled).toFixed(2)),
       };
 
-      // Detect live vs fallback: real SARIMA gives non-round demand figures
       setIsLive(res.expected_demand % 10 !== 0);
       setResult(enriched);
       setHistory(prev => [{ ...enriched, id: Date.now(), duration: form.duration, model: form.model, area: form.area }, ...prev.slice(0, 4)]);
-    } catch (e: any) {
+    } catch {
       setError("Prediction failed. Check your connection.");
-      console.error(e);
     } finally {
       setLoading(false);
     }
   };
 
   const totalCost = result ? parseFloat((result.predicted_price * form.duration).toFixed(2)) : 0;
-
-  // Best time to rent: 10–15 h (standard pricing window)
-  const cheapHours = [10, 11, 12, 13, 14, 15];
+  const cheapHours = hourlyData.filter(h => h.price === stdPrice).map(h => h.hour);
   const currentHour = parseInt(form.time.split(":")[0]);
-  const altHour = result?.surge_multiplier > 1.0
-    ? cheapHours.filter(h => h !== currentHour)[0]
+  const altHour = result?.surge_multiplier > 1.0 && cheapHours.length
+    ? cheapHours.filter(h => h !== currentHour)[0] ?? null
     : null;
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="font-display font-bold text-2xl text-white flex items-center gap-2">
-          <Zap className="w-6 h-6 text-brand-400" /> Smart Price Predictor
-        </h1>
-        <p className="text-slate-500 text-sm mt-0.5">SARIMA-powered demand &amp; pricing predictions for your rental</p>
+      <div className="flex items-start justify-between">
+        <div>
+          <h1 className="font-display font-bold text-2xl text-white flex items-center gap-2">
+            <Zap className="w-6 h-6 text-brand-400" /> Smart Price Predictor
+          </h1>
+          <p className="text-slate-500 text-sm mt-0.5">SARIMA-powered demand &amp; pricing predictions for your rental</p>
+        </div>
+        <div className="flex items-center gap-2">
+          {chartsLive && (
+            <span className="badge-success flex items-center gap-1.5">
+              <span className="w-1.5 h-1.5 rounded-full bg-green-400 animate-pulse" /> Live SARIMA
+            </span>
+          )}
+          <button onClick={loadCharts} disabled={chartsLoading} title="Refresh chart data"
+            className="glass rounded-lg px-3 py-2 text-slate-400 hover:text-white transition-colors disabled:opacity-50">
+            <RefreshCw className={`w-4 h-4 ${chartsLoading ? "animate-spin" : ""}`} />
+          </button>
+        </div>
       </div>
 
       <div className="grid lg:grid-cols-5 gap-6">
-        {/* ── Form ───────────────────────────────────────────────────── */}
+        {/* ── Form ──────────────────────────────────────────────────────── */}
         <div className="lg:col-span-2 space-y-4">
           <div className="glass rounded-2xl p-6">
             <h3 className="font-display font-semibold text-white mb-4 flex items-center gap-2">
@@ -203,7 +222,7 @@ export default function PredictorPage() {
           )}
         </div>
 
-        {/* ── Results ─────────────────────────────────────────────────── */}
+        {/* ── Results ───────────────────────────────────────────────────── */}
         <div className="lg:col-span-3 space-y-6">
           <AnimatePresence mode="wait">
             {result ? (
@@ -247,7 +266,6 @@ export default function PredictorPage() {
                     </div>
                   </div>
 
-                  {/* Expected demand from ML */}
                   <div className="flex items-center gap-2 p-3 bg-white/3 rounded-lg mb-2">
                     <Bike className="w-4 h-4 text-slate-400 shrink-0" />
                     <span className="text-xs text-slate-400">
@@ -264,11 +282,11 @@ export default function PredictorPage() {
                       </span>
                     </div>
                   )}
-                  {altHour && (
+                  {altHour != null && (
                     <div className="flex items-center gap-2.5 p-3 bg-amber-500/10 border border-amber-500/20 rounded-lg mt-2">
                       <AlertTriangle className="w-4 h-4 text-amber-400 shrink-0" />
                       <span className="text-sm text-amber-200">
-                        💡 Rent at <strong>{altHour.toString().padStart(2,"0")}:00</strong> instead — Standard pricing (₹{BASE_PRICES[form.model]}/hr)
+                        💡 Rent at <strong>{altHour.toString().padStart(2,"0")}:00</strong> instead — Standard pricing (₹{stdPrice}/hr)
                       </span>
                     </div>
                   )}
@@ -304,49 +322,73 @@ export default function PredictorPage() {
             )}
           </AnimatePresence>
 
-          {/* Hourly price chart (always visible) */}
+          {/* Hourly price chart — DYNAMIC from backend */}
           <div className="glass rounded-2xl p-6">
-            <h4 className="font-display font-semibold text-white mb-4 flex items-center gap-2">
-              <Clock className="w-4 h-4 text-brand-400" /> Today's Hourly Pricing
-            </h4>
-            <ResponsiveContainer width="100%" height={180}>
-              <AreaChart data={hourlyForecast}>
-                <defs>
-                  <linearGradient id="pGrad" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="5%"  stopColor="#6366f1" stopOpacity={0.3} />
-                    <stop offset="95%" stopColor="#6366f1" stopOpacity={0} />
-                  </linearGradient>
-                </defs>
-                <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.04)" />
-                <XAxis dataKey="hour" tick={{ fontSize: 9 }} interval={3} />
-                <YAxis domain={[60, 85]} tick={{ fontSize: 9 }} />
-                <Tooltip content={<ChartTooltip />} />
-                <ReferenceLine y={65}    stroke="#10b981" strokeDasharray="3 3" />
-                <ReferenceLine y={81.25} stroke="#ef4444" strokeDasharray="3 3" />
-                <Area type="stepAfter" dataKey="price" name="Price (₹)" stroke="#6366f1" fill="url(#pGrad)" strokeWidth={2.5} />
-              </AreaChart>
-            </ResponsiveContainer>
+            <div className="flex items-center justify-between mb-4">
+              <h4 className="font-display font-semibold text-white flex items-center gap-2">
+                <Clock className="w-4 h-4 text-brand-400" /> Today's Hourly Pricing
+              </h4>
+              {chartsLive && <span className="badge-success text-xs">Live SARIMA</span>}
+            </div>
+            {chartsLoading ? <Skeleton className="h-52" /> : (
+              <ResponsiveContainer width="100%" height={200}>
+                <AreaChart data={hourlyData}>
+                  <defs>
+                    <linearGradient id="pGrad" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="5%"  stopColor="#6366f1" stopOpacity={0.3} />
+                      <stop offset="95%" stopColor="#6366f1" stopOpacity={0} />
+                    </linearGradient>
+                  </defs>
+                  <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.04)" />
+                  <XAxis dataKey="hour_label" tick={{ fontSize: 9 }} interval={3} />
+                  <YAxis domain={[stdPrice - 5, peakPrice + 5]} tick={{ fontSize: 9 }} />
+                  <Tooltip content={<ChartTooltip />} />
+                  <ReferenceLine y={stdPrice}  stroke="#10b981" strokeDasharray="3 3" />
+                  <ReferenceLine y={peakPrice} stroke="#ef4444" strokeDasharray="3 3" />
+                  <Area type="stepAfter" dataKey="price" name="Price (₹)" stroke="#6366f1" fill="url(#pGrad)" strokeWidth={2.5} />
+                </AreaChart>
+              </ResponsiveContainer>
+            )}
             <div className="mt-3 text-xs text-slate-500">
-              🟢 Green = Standard (₹65) · 🔴 Red = Peak Surge (₹81.25) · Best window: 10 AM – 4 PM
+              🟢 Green = Standard (₹{stdPrice}) · 🔴 Red = Peak Surge (₹{peakPrice})
+              {cheapestDay && ` · Best window: hours with ₹${stdPrice}`}
             </div>
           </div>
 
-          {/* Weekly best days */}
+          {/* Weekly best days — DYNAMIC from backend */}
           <div className="glass rounded-2xl p-6">
-            <h4 className="font-display font-semibold text-white mb-4 flex items-center gap-2">
-              <TrendingDown className="w-4 h-4 text-emerald-400" /> Best Day This Week
-            </h4>
-            <div className="grid grid-cols-7 gap-2">
-              {weeklyForecast.map(d => (
-                <div key={d.day} className={`rounded-xl p-3 text-center ${d.price === 65 ? "bg-emerald-500/10 border border-emerald-500/20" : d.price === 81.25 ? "bg-red-500/10 border border-red-500/20" : "bg-amber-500/10 border border-amber-500/20"}`}>
-                  <div className="text-xs text-slate-500">{d.day}</div>
-                  <div className={`text-sm font-mono font-bold mt-1 ${d.price === 65 ? "text-emerald-400" : d.price === 81.25 ? "text-red-400" : "text-amber-400"}`}>
-                    ₹{d.price}
-                  </div>
-                </div>
-              ))}
+            <div className="flex items-center justify-between mb-4">
+              <h4 className="font-display font-semibold text-white flex items-center gap-2">
+                <TrendingDown className="w-4 h-4 text-emerald-400" /> Best Day This Week
+              </h4>
+              {chartsLive && <span className="badge-success text-xs">SARIMA Forecast</span>}
             </div>
-            <p className="text-xs text-slate-500 mt-3">💡 Tue &amp; Wed are cheapest — Standard pricing all day!</p>
+            {chartsLoading ? <Skeleton className="h-24" /> : (
+              <div className="grid grid-cols-7 gap-2">
+                {weeklyData.map(d => {
+                  const isCheapest = d.price === stdPrice;
+                  const isPeak = d.price === peakPrice;
+                  return (
+                    <div key={d.day} className={`rounded-xl p-3 text-center border ${
+                      isCheapest ? "bg-emerald-500/10 border-emerald-500/20"
+                      : isPeak   ? "bg-red-500/10 border-red-500/20"
+                                 : "bg-amber-500/10 border-amber-500/20"
+                    }`}>
+                      <div className="text-xs text-slate-500">{d.day}</div>
+                      <div className={`text-sm font-mono font-bold mt-1 ${
+                        isCheapest ? "text-emerald-400" : isPeak ? "text-red-400" : "text-amber-400"
+                      }`}>₹{d.price}</div>
+                      <div className="text-xs text-slate-600 mt-0.5">{d.demand_label}</div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+            {cheapestDay && (
+              <p className="text-xs text-slate-500 mt-3">
+                💡 <strong className="text-slate-400">{weeklyData.filter(d => d.price === stdPrice).map(d => d.day).join(" & ")}</strong> are cheapest — Standard pricing all day!
+              </p>
+            )}
           </div>
         </div>
       </div>
