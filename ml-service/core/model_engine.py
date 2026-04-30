@@ -285,15 +285,16 @@ class ModelEngine:
             if "area_name" in df.columns and df["area_name"].nunique()>1:
                 heat = df.groupby(["area_name","hr"])["cnt"].mean().unstack("hr").fillna(0)
             else:
-            # Decompose using area weights
-            area_weights = {"Indiranagar":1.3,"Koramangala":1.2,"Whitefield":1.1,
-                            "Marathahalli":1.0,"HSR Layout":1.15,"Jayanagar":0.9,
-                            "Electronic City":0.95,"Hebbal":0.85}
-            total_w = sum(area_weights.values())
-            hrly = df.groupby("hr")["cnt"].mean()
-            for area, w in area_weights.items():
-                heat[area] = {hr: round(v*w/total_w,1) for hr,v in hrly.items()}
-            heat = pd.DataFrame(heat).T
+                # Decompose using area weights
+                area_weights = {"Indiranagar":1.3,"Koramangala":1.2,"Whitefield":1.1,
+                                "Marathahalli":1.0,"HSR Layout":1.15,"Jayanagar":0.9,
+                                "Electronic City":0.95,"Hebbal":0.85}
+                total_w = sum(area_weights.values())
+                hrly = df.groupby("hr")["cnt"].mean()
+                for area, w in area_weights.items():
+                    heat[area] = {hr: round(v*w/total_w,1) for hr,v in hrly.items()}
+                heat = pd.DataFrame(heat).T
+
             
         result = []
         if not heat.empty:
