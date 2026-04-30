@@ -39,12 +39,10 @@ app.add_middleware(
     CORSMiddleware,
     allow_origins=[
         "https://bike-sense-sable.vercel.app",
-        "https://bike-sense-sable.vercel.app/",
         "http://localhost:3000",
         "http://localhost:3001",
-        # Allow all Vercel preview deployments
-        "https://*.vercel.app",
     ],
+    allow_origin_regex=r"https://.*\.vercel\.app",
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],

@@ -14,14 +14,7 @@ const nextConfig = {
       { protocol: "https", hostname: "img.clerk.com" },
     ],
   },
-  async rewrites() {
-    return [
-      {
-        source: "/api/ml/:path*",
-        destination: `${process.env.ML_API_URL || "http://localhost:8000"}/api/v1/:path*`,
-      },
-    ];
-  },
+  // ML proxy is handled by app/api/ml/[...path]/route.ts (reads ML_API_URL at runtime)
 };
 
 module.exports = nextConfig;
