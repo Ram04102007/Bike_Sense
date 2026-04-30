@@ -18,9 +18,9 @@ async def get_heatmap(date: Optional[str] = None, request: Request = None):
 
 
 @router.get("/pricing/recommend")
-async def recommend_price(area: str, hour: int, is_weekend: bool = False, request: Request = None):
+async def recommend_price(area: str, hour: int, is_weekend: bool = False, date: Optional[str] = None, request: Request = None):
     engine = request.app.state.engine
-    return {"success": True, "data": engine.get_price_recommendation(area, hour, is_weekend)}
+    return {"success": True, "data": engine.get_price_recommendation(area, hour, is_weekend, date)}
 
 
 @router.get("/pricing/hourly-schedule")

@@ -205,17 +205,17 @@ class ModelEngine:
             else:
                 d_dem = float(self.fit_daily.get_forecast(max(1,(target_d.date()-self.daily_ts.index[-1].date()).days)).predicted_mean.iloc[-1])
             norm = float(self.hourly_profile_norm[hr]) / self.hourly_profile_norm.mean()
-            base_agg = max(0, d_dem * norm)
+            base_agg = max(0, (d_dem / 24.0) * norm)
             ci = (max(0, base_agg*0.85), base_agg*1.15)
         else:
-            target_me = query_dt.to_period("M").to_timestamp("ME")
+            target_me = query_dt.to_period("M").to_timestamp("M")
             if target_me in self._fc_long["mean"].index:
                 m_dem = float(self._fc_long["mean"][target_me])
             else:
                 m_dem = float(self.fit_monthly.get_forecast(1).predicted_mean.iloc[-1])
             d_dem = m_dem / query_dt.days_in_month
             norm  = float(self.hourly_profile_norm[hr]) / self.hourly_profile_norm.mean()
-            base_agg = max(0, d_dem * norm)
+            base_agg = max(0, (d_dem / 24.0) * norm)
             ci = (max(0, base_agg*0.80), base_agg*1.20)
 
         surge  = self.compute_surge(base_agg)
@@ -330,7 +330,7 @@ class ModelEngine:
             "repeat_rate":    68.4,
         }
 
-    def get_price_recommendation(self, area: str, hour: int, is_weekend: bool = False) -> dict:
+    def get_price_recommendation(self, area: str, hour: int, is_weekend: bool = False, date: str = None) -> dict:
         area_weights = {"Indiranagar":1.3,"Koramangala":1.2,"Whitefield":1.1,"Marathahalli":1.0,
                         "HSR Layout":1.15,"Jayanagar":0.9,"Electronic City":0.95,"Hebbal":0.85}
         area_w     = area_weights.get(area, 1.0)
@@ -338,9 +338,15 @@ class ModelEngine:
         wknd_boost = 1.1 if is_weekend else 1.0
         demand_idx = area_w * hr_factor * wknd_boost
 
-        # Use actual SARIMA mean as the demand base
-        sarima_mean = float(self.hourly_ts["cnt"].mean())
-        base_dem    = sarima_mean * demand_idx
+        if date:
+            # Use precise SARIMA prediction for this exact date
+            pred = self.predict(date, f"{hour:02d}:00", location=area)
+            # Apply area weight to the city-wide prediction to get zone-equivalent demand
+            base_dem = pred["expected_demand"] * area_w
+        else:
+            # Use actual SARIMA mean as the demand base
+            sarima_mean = float(self.hourly_ts["cnt"].mean())
+            base_dem    = sarima_mean * demand_idx
 
         surge = self.compute_surge(base_dem)
         price = round(BASE_PRICE * surge, 2)

@@ -9,7 +9,7 @@ import {
   DollarSign, Zap, TrendingUp, RefreshCw,
   WifiOff, MapPin, Clock, Activity, Info,
 } from "lucide-react";
-import { mockPricingRec, getHourlyPriceSchedule, getZonePriceMatrix } from "@/lib/api";
+import { getPricingRec, getHourlyPriceSchedule, getZonePriceMatrix } from "@/lib/api";
 
 const AREAS = [
   "Indiranagar","Koramangala","Whitefield","Marathahalli",
@@ -66,7 +66,8 @@ function TierBadge({ tier, surge }: { tier: string; surge: number }) {
 export default function PricingPage() {
   const [selectedArea, setSelectedArea] = useState("Indiranagar");
   const [selectedHour, setSelectedHour] = useState(new Date().getHours());
-  const [isWeekend, setIsWeekend]       = useState(false);
+  const [selectedDate, setSelectedDate] = useState(new Date().toISOString().split("T")[0]);
+  const [isWeekend, setIsWeekend]       = useState(new Date().getDay() === 0 || new Date().getDay() === 6);
 
   // ML recommendation
   const [mlRec, setMlRec]               = useState<any>(null);
@@ -89,29 +90,21 @@ export default function PricingPage() {
     setRecLoading(true);
     setRecError(false);
     try {
-      const url = `/api/ml/admin/pricing/recommend?area=${encodeURIComponent(selectedArea)}&hour=${selectedHour}&is_weekend=${isWeekend}`;
-      const controller = new AbortController();
-      const timer = setTimeout(() => controller.abort(), 12000);
-      const res = await fetch(url, { signal: controller.signal });
-      clearTimeout(timer);
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      const json = await res.json();
-      const rec = json.data ?? json;
+      const rec = await getPricingRec(selectedArea, selectedHour, isWeekend, selectedDate);
       if (rec?.recommended_price) {
         setMlRec(rec);
         setIsLive(true);
       } else {
-        throw new Error("Invalid response");
+        throw new Error("Invalid response from ML backend");
       }
     } catch {
-      // Backend offline — show formula-based demo pricing
-      setMlRec(mockPricingRec(selectedArea, selectedHour, isWeekend));
+      setMlRec(null);
       setIsLive(false);
-      setRecError(false);
+      setRecError(true);
     } finally {
       setRecLoading(false);
     }
-  }, [selectedArea, selectedHour, isWeekend]);
+  }, [selectedArea, selectedHour, isWeekend, selectedDate]);
 
   useEffect(() => { fetchRecommendation(); }, [fetchRecommendation]);
 
@@ -234,6 +227,20 @@ export default function PricingPage() {
               </select>
             </div>
 
+            {/* Date selector */}
+            <div>
+              <label className="text-xs text-slate-500 mb-1.5 flex items-center gap-1">
+                <Clock className="w-3 h-3" /> Date
+              </label>
+              <input type="date" value={selectedDate} 
+                onChange={e => {
+                  setSelectedDate(e.target.value);
+                  const dt = new Date(e.target.value);
+                  setIsWeekend(dt.getDay() === 0 || dt.getDay() === 6);
+                }}
+                className="input-dark w-full" />
+            </div>
+
             {/* Hour slider */}
             <div>
               <div className="flex items-center justify-between mb-1.5">
@@ -253,12 +260,11 @@ export default function PricingPage() {
             </div>
 
             {/* Weekend toggle */}
-            <div className="flex items-center justify-between p-3 glass-light rounded-lg">
-              <span className="text-sm text-slate-300">Weekend pricing</span>
-              <button onClick={() => setIsWeekend(!isWeekend)}
-                className={`w-10 h-5 rounded-full transition-all relative ${isWeekend ? "bg-brand-500" : "bg-slate-700"}`}>
+            <div className="flex items-center justify-between p-3 glass-light rounded-lg opacity-70 cursor-not-allowed">
+              <span className="text-sm text-slate-300">Weekend pricing (auto-set by date)</span>
+              <div className={`w-10 h-5 rounded-full transition-all relative ${isWeekend ? "bg-brand-500" : "bg-slate-700"}`}>
                 <span className={`absolute top-0.5 w-4 h-4 bg-white rounded-full transition-all ${isWeekend ? "left-5" : "left-0.5"}`} />
-              </button>
+              </div>
             </div>
 
             {/* ML Base Price — read-only, from engine */}

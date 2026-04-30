@@ -69,7 +69,7 @@ export default function AdminDashboard() {
   const [zoneData, setZoneData] = useState<{ zone: string; rides: number; revenue: number; surge: number }[]>([]);
   const [alerts, setAlerts] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
-  const [dataSource, setDataSource] = useState<"live" | "fallback">("live");
+  const [error, setError] = useState<string | null>(null);
   const [lastRefresh, setLastRefresh] = useState<Date | null>(null);
 
   // Live clock
@@ -83,8 +83,9 @@ export default function AdminDashboard() {
 
   const loadData = async () => {
     setLoading(true);
+    setError(null);
     try {
-      const [rev, forecast, heatmap, alertsData, zoneIntelData] = await Promise.all([
+      const [rev, forecast, _heatmap, alertsData, zoneIntelData] = await Promise.all([
         getAdminRevenue(),
         getShortForecast(),
         getHeatmapData(),
@@ -95,11 +96,10 @@ export default function AdminDashboard() {
       setAlerts(alertsData);
       setWeeklyData(aggregateToDays(forecast));
       setZoneData(zoneIntelData);
-      // Detect if we got real or mock data (real will have non-round total_revenue)
-      setDataSource(rev.total_revenue % 1000 !== 0 ? "live" : "fallback");
       setLastRefresh(new Date());
-    } catch (e) {
+    } catch (e: any) {
       console.error("Dashboard load error:", e);
+      setError(e?.message ?? "Could not reach ML backend. Make sure uvicorn is running on port 8000.");
     } finally {
       setLoading(false);
     }
@@ -141,12 +141,24 @@ export default function AdminDashboard() {
           >
             <RefreshCw className={`w-4 h-4 ${loading ? "animate-spin" : ""}`} />
           </button>
-          <span className={`badge-${dataSource === "live" ? "success" : "info"} flex items-center gap-1.5`}>
-            <span className={`w-1.5 h-1.5 rounded-full animate-pulse ${dataSource === "live" ? "bg-green-400" : "bg-blue-400"}`} />
-            {dataSource === "live" ? "SARIMA Live" : "Demo Mode"}
+          <span className="badge-success flex items-center gap-1.5">
+            <span className="w-1.5 h-1.5 rounded-full animate-pulse bg-green-400" />
+            SARIMA Live
           </span>
         </div>
       </div>
+
+      {/* Error Banner */}
+      {error && (
+        <motion.div initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }}
+          className="glass rounded-xl p-4 border border-red-500/30 flex items-start gap-3">
+          <AlertTriangle className="w-5 h-5 text-red-400 shrink-0 mt-0.5" />
+          <div>
+            <p className="text-sm font-medium text-red-300">ML Backend Unreachable</p>
+            <p className="text-xs text-slate-400 mt-1">{error}</p>
+          </div>
+        </motion.div>
+      )}
 
       {/* KPI Grid */}
       <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
