@@ -111,7 +111,7 @@ export default function AdminDashboard() {
   const kpis = revenue
     ? [
         { title: "Total Rides (Month)", value: revenue.monthly_rides.toLocaleString(), change: 8.4, icon: Bike, color: "#6366f1", sub: "↑ vs last month" },
-        { title: "Revenue (Month)", value: `₹${(revenue.total_revenue / 100000).toFixed(1)}L`, change: 12.1, icon: DollarSign, color: "#00f5ff", sub: "Gross revenue" },
+        { title: "Revenue (Month)", value: `₹${revenue.monthly_revenue.toFixed(1)}L`, change: 12.1, icon: DollarSign, color: "#00f5ff", sub: "Gross revenue" },
         { title: "Active Bikes", value: revenue.active_bikes.toString(), change: 3.2, icon: Activity, color: "#00ff88", sub: `${revenue.occupancy_pct}% occupancy` },
         { title: "Repeat Customers", value: `${revenue.repeat_rate}%`, change: 2.1, icon: Users, color: "#f59e0b", sub: "Retention rate" },
         { title: "Avg Price / Ride", value: `₹${revenue.avg_price.toFixed(2)}`, change: -1.3, icon: Clock, color: "#a78bfa", sub: "Per booking" },
