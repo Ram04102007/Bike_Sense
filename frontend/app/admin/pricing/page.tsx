@@ -9,7 +9,7 @@ import {
   DollarSign, Zap, TrendingUp, RefreshCw,
   WifiOff, MapPin, Clock, Activity, Info,
 } from "lucide-react";
-import { getPricingRec, getHourlyPriceSchedule, getZonePriceMatrix } from "@/lib/api";
+import { mockPricingRec, getHourlyPriceSchedule, getZonePriceMatrix } from "@/lib/api";
 
 const AREAS = [
   "Indiranagar","Koramangala","Whitefield","Marathahalli",
@@ -89,18 +89,25 @@ export default function PricingPage() {
     setRecLoading(true);
     setRecError(false);
     try {
-      const rec = await getPricingRec(selectedArea, selectedHour, isWeekend);
-      if (rec && rec.recommended_price) {
+      const url = `/api/ml/admin/pricing/recommend?area=${encodeURIComponent(selectedArea)}&hour=${selectedHour}&is_weekend=${isWeekend}`;
+      const controller = new AbortController();
+      const timer = setTimeout(() => controller.abort(), 12000);
+      const res = await fetch(url, { signal: controller.signal });
+      clearTimeout(timer);
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const json = await res.json();
+      const rec = json.data ?? json;
+      if (rec?.recommended_price) {
         setMlRec(rec);
         setIsLive(true);
       } else {
-        setMlRec(null);
-        setIsLive(false);
+        throw new Error("Invalid response");
       }
     } catch {
-      setMlRec(null);
+      // Backend offline — show formula-based demo pricing
+      setMlRec(mockPricingRec(selectedArea, selectedHour, isWeekend));
       setIsLive(false);
-      setRecError(true);
+      setRecError(false);
     } finally {
       setRecLoading(false);
     }

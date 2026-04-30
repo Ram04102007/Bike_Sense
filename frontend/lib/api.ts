@@ -191,8 +191,49 @@ export const getZoneIntelligence  = () => apiFetch<any[]>(`${ML_API}/admin/zone-
 
 export const getCustomerAnalytics = () => apiFetch<any>(`${ML_API}/admin/customers/analytics`, {}, {});
 export const getMonthlyReport     = () => apiFetch<any[]>(`${ML_API}/admin/reports/monthly`, {}, []);
-export const getPricingRec        = (area: string, hour: number, is_weekend = false) =>
-  apiFetch<any>(`${ML_API}/admin/pricing/recommend?area=${encodeURIComponent(area)}&hour=${hour}&is_weekend=${is_weekend}`, {}, null);
+const AREA_WEIGHTS: Record<string, number> = {
+  Indiranagar: 1.3, Koramangala: 1.2, Whitefield: 1.1,
+  "HSR Layout": 1.15, Marathahalli: 1.0, "Electronic City": 0.95,
+  Jayanagar: 0.9, Hebbal: 0.85,
+};
+
+export function mockPricingRec(area: string, hour: number, is_weekend: boolean) {
+  const areaWeight   = AREA_WEIGHTS[area] ?? 1.0;
+  const isRush       = (hour >= 7 && hour <= 9) || (hour >= 17 && hour <= 20);
+  const isMid        = hour >= 10 && hour <= 15;
+  const hourlyFactor = isRush ? 1.4 : isMid ? 1.0 : 0.7;
+  const weekendBoost = is_weekend ? 1.1 : 1.0;
+  const demandIndex  = parseFloat((areaWeight * hourlyFactor * weekendBoost).toFixed(2));
+  const demandPct    = Math.min(99, Math.round(demandIndex * 45));
+
+  let surge = 1.0, tier = "Standard", strategy = "Standard pricing";
+  if (demandIndex >= 1.4)      { surge = 1.25; tier = "Peak Surge"; strategy = "Peak surge active";    }
+  else if (demandIndex >= 1.1) { surge = 1.17; tier = "High";       strategy = "High demand pricing";  }
+  else if (demandIndex >= 0.9) { surge = 1.08; tier = "Moderate";   strategy = "Moderate pricing";     }
+
+  const base  = 65;
+  const price = parseFloat((base * surge * (is_weekend && surge < 1.25 ? 1.1 : 1)).toFixed(2));
+  return {
+    area, hour, is_weekend,
+    base_price:        base,
+    recommended_price: price,
+    surge_multiplier:  surge,
+    demand_index:      demandIndex,
+    demand_percentile: demandPct,
+    area_weight:       areaWeight,
+    hourly_factor:     hourlyFactor,
+    tier,
+    strategy,
+    savings_vs_peak:   parseFloat((81.25 - price).toFixed(2)),
+  };
+}
+
+export const getPricingRec = (area: string, hour: number, is_weekend = false) =>
+  apiFetch<any>(
+    `${ML_API}/admin/pricing/recommend?area=${encodeURIComponent(area)}&hour=${hour}&is_weekend=${is_weekend}`,
+    {},
+    mockPricingRec(area, hour, is_weekend),
+  );
 
 // Fallback: formula-based hourly schedule
 const mockHourlySchedule = (area = "Indiranagar") => {
