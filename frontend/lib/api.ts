@@ -151,8 +151,27 @@ export const getHeatmapData = (date?: string) => {
   return apiFetch<{ area: string; hour: number; demand: number }[]>(url, {}, mockHeatmap);
 };
 
-export const getFleetData         = () => apiFetch<any[]>(`${ML_API}/admin/fleet`, {}, []);
-export const getBikeModels        = () => apiFetch<any[]>(`${ML_API}/admin/fleet/models`, {}, []);
+const mockFleetData = [
+  { area:"Indiranagar",   total:130, available:72, in_use:48, maintenance:10, low_battery:5, demand_score:1.28 },
+  { area:"Koramangala",   total:118, available:64, in_use:42, maintenance:8,  low_battery:4, demand_score:1.18 },
+  { area:"Whitefield",    total:112, available:58, in_use:40, maintenance:9,  low_battery:5, demand_score:1.09 },
+  { area:"HSR Layout",    total:105, available:55, in_use:38, maintenance:7,  low_battery:5, demand_score:1.13 },
+  { area:"Marathahalli",  total: 98, available:50, in_use:35, maintenance:8,  low_battery:5, demand_score:0.98 },
+  { area:"Jayanagar",     total: 90, available:48, in_use:32, maintenance:6,  low_battery:4, demand_score:0.91 },
+  { area:"Electronic City",total:95, available:52, in_use:33, maintenance:7,  low_battery:3, demand_score:0.95 },
+  { area:"Hebbal",        total: 85, available:44, in_use:29, maintenance:6,  low_battery:6, demand_score:0.84 },
+];
+export const getFleetData  = () => apiFetch<any[]>(`${ML_API}/admin/fleet`, {}, mockFleetData);
+
+const mockBikeModels = [
+  { model:"Ather 450X",     count:247, available:162, type:"EV",      avg_battery:82, issues:6,  revenue:"₹4.2L" },
+  { model:"Bounce Infinity",count:198, available:128, type:"EV",      avg_battery:71, issues:9,  revenue:"₹3.1L" },
+  { model:"Yulu Move",      count:156, available:110, type:"EV",      avg_battery:88, issues:4,  revenue:"₹1.7L" },
+  { model:"Honda Activa",   count:183, available:130, type:"Scooter", avg_battery:null, issues:11, revenue:"₹2.8L" },
+  { model:"Royal Enfield",  count: 87, available: 55, type:"Premium", avg_battery:null, issues:7,  revenue:"₹3.3L" },
+  { model:"Rapido Bike",    count:132, available: 88, type:"Budget",  avg_battery:null, issues:8,  revenue:"₹1.4L" },
+];
+export const getBikeModels = () => apiFetch<any[]>(`${ML_API}/admin/fleet/models`, {}, mockBikeModels);
 
 const mockAlerts = [
   { type: "warning", msg: "Indiranagar demand spike expected 5–7 PM", time: "10 min ago" },
