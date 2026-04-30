@@ -14,6 +14,10 @@ const nextConfig = {
       { protocol: "https", hostname: "img.clerk.com" },
     ],
   },
+  devIndicators: {
+    appIsrStatus: false,
+    buildActivity: false,
+  },
   // ML proxy is handled by app/api/ml/[...path]/route.ts (reads ML_API_URL at runtime)
 };
 

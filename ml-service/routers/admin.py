@@ -81,27 +81,36 @@ async def get_fleet(request: Request):
     current_hour = datetime.now().hour
     is_weekend = datetime.now().weekday() >= 5
 
-    # We remove the hardcoded seed to make hardware stats vary slightly on refresh
-    # but keep them within realistic ranges
-    areas = ["Indiranagar","Koramangala","Whitefield","Marathahalli",
-             "HSR Layout","Jayanagar","Electronic City","Hebbal"]
+    base_totals = {
+        "Indiranagar": 250, "Koramangala": 220, "Whitefield": 180,
+        "Marathahalli": 160, "HSR Layout": 190, "Jayanagar": 140,
+        "Electronic City": 130, "Hebbal": 110
+    }
+    
     fleet = []
-    for a in areas:
-        total = random.randint(80, 150)
-        available = random.randint(40, total-10)
-        maintenance = random.randint(3, 12)
-        
+    for a, total in base_totals.items():
         # Pull real demand index from the SARIMA model engine
         ml_data = engine.get_price_recommendation(a, current_hour, is_weekend)
         demand_score = ml_data.get("demand_index", 1.0)
+        
+        # Base utilization is ~30% of fleet at 1.0 demand
+        # As demand spikes to 1.5x, utilization spikes to 45% or higher
+        in_use = int(total * 0.35 * demand_score)
+        in_use = min(in_use, int(total * 0.85)) # Max 85% in use
+        
+        # Realistic static percentages for hardware issues
+        maintenance = int(total * 0.05)
+        low_battery = int(total * 0.04)
+        
+        available = total - in_use - maintenance
 
         fleet.append({
             "area": a,
             "total": total,
             "available": available,
-            "in_use": total - available - maintenance,
+            "in_use": in_use,
             "maintenance": maintenance,
-            "low_battery": random.randint(2, 8),
+            "low_battery": low_battery,
             "demand_score": demand_score,
         })
     return {"success": True, "data": fleet}
@@ -131,9 +140,15 @@ async def get_fleet_models(request: Request):
     ]
     models = []
     for m in model_configs:
-        # Available varies slightly around 65% of fleet
-        available = random.randint(int(m["count"] * 0.55), int(m["count"] * 0.75))
-        issues    = random.randint(3, 14)
+        # Determine utilization purely from ML demand index
+        in_use = int(m["count"] * 0.35 * demand_idx)
+        in_use = min(in_use, int(m["count"] * 0.85))
+        
+        # Static realistic hardware issues percentage
+        issues = int(m["count"] * 0.05)
+        
+        # Available is deterministically calculated
+        available = m["count"] - in_use - issues
         # Revenue scales with current ML demand index
         rev = round(m["base_rev"] * demand_idx * surge, 1)
         entry = {
