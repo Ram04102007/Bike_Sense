@@ -190,21 +190,7 @@ const mockZoneIntelligence = [
 export const getZoneIntelligence  = () => apiFetch<any[]>(`${ML_API}/admin/zone-intelligence`, {}, mockZoneIntelligence);
 
 export const getCustomerAnalytics = () => apiFetch<any>(`${ML_API}/admin/customers/analytics`, {}, {});
-const mockMonthlyReport = [
-  { period: "2024-01", rides: 1520, revenue: 10.5 },
-  { period: "2024-02", rides: 1680, revenue: 11.6 },
-  { period: "2024-03", rides: 1920, revenue: 13.2 },
-  { period: "2024-04", rides: 2050, revenue: 14.1 },
-  { period: "2024-05", rides: 2210, revenue: 15.2 },
-  { period: "2024-06", rides: 1990, revenue: 13.7 },
-  { period: "2024-07", rides: 2100, revenue: 14.5 },
-  { period: "2024-08", rides: 2280, revenue: 15.7 },
-  { period: "2024-09", rides: 2150, revenue: 14.8 },
-  { period: "2024-10", rides: 2340, revenue: 16.1 },
-  { period: "2024-11", rides: 2190, revenue: 15.1 },
-  { period: "2024-12", rides: 2410, revenue: 16.6 },
-];
-export const getMonthlyReport     = () => apiFetch<any[]>(`${ML_API}/admin/reports/monthly`, {}, mockMonthlyReport);
+export const getMonthlyReport     = () => apiFetch<any[]>(`${ML_API}/admin/reports/monthly`, {}, []);
 export const getPricingRec        = (area: string, hour: number, is_weekend = false) =>
   apiFetch<any>(`${ML_API}/admin/pricing/recommend?area=${encodeURIComponent(area)}&hour=${hour}&is_weekend=${is_weekend}`, {}, null);
 

@@ -3,7 +3,7 @@ import { useState, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   BarChart, Bar, LineChart, Line, AreaChart, Area,
-  XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend,
+  XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
 } from "recharts";
 import {
   FileBarChart2, Download, TrendingUp, TrendingDown,
@@ -12,22 +12,6 @@ import {
 import toast from "react-hot-toast";
 import { getMonthlyReport } from "@/lib/api";
 
-// ─── Static 12-month fallback ─────────────────────────────────────────────────
-const FALLBACK_MONTHLY = [
-  { period: "2024-01", rides: 1520, revenue: 10.5 },
-  { period: "2024-02", rides: 1680, revenue: 11.6 },
-  { period: "2024-03", rides: 1920, revenue: 13.2 },
-  { period: "2024-04", rides: 2050, revenue: 14.1 },
-  { period: "2024-05", rides: 2210, revenue: 15.2 },
-  { period: "2024-06", rides: 1990, revenue: 13.7 },
-  { period: "2024-07", rides: 2100, revenue: 14.5 },
-  { period: "2024-08", rides: 2280, revenue: 15.7 },
-  { period: "2024-09", rides: 2150, revenue: 14.8 },
-  { period: "2024-10", rides: 2340, revenue: 16.1 },
-  { period: "2024-11", rides: 2190, revenue: 15.1 },
-  { period: "2024-12", rides: 2410, revenue: 16.6 },
-];
-
 // ─── Types ────────────────────────────────────────────────────────────────────
 interface MonthRow {
   month: string;
@@ -35,10 +19,11 @@ interface MonthRow {
   revenue: number;
   growth: number | null;
   avgPrice: number;
+  isForecast?: boolean;
 }
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
-function transformRaw(raw: { period: string; rides: number; revenue: number }[]): MonthRow[] {
+function transformRaw(raw: any[]): MonthRow[] {
   return raw.map((cur, i) => {
     const prev = raw[i - 1];
     const growth = prev && prev.revenue > 0
@@ -54,20 +39,21 @@ function transformRaw(raw: { period: string; rides: number; revenue: number }[])
       revenue: cur.revenue,
       growth,
       avgPrice: cur.rides > 0 ? parseFloat(((cur.revenue * 1000) / cur.rides).toFixed(1)) : 0,
+      isForecast: !!cur.is_forecast
     };
   });
 }
 
 function exportCSV(rows: MonthRow[]) {
-  const header = "Month,Total Rides,Revenue (₹L),Growth (%),Avg Price (₹)\n";
+  const header = "Month,Type,Total Rides,Revenue (₹L),Growth (%),Avg Price (₹)\n";
   const body = rows
-    .map(r => `${r.month},${r.rides},${r.revenue},${r.growth ?? "—"},${r.avgPrice}`)
+    .map(r => `${r.month},${r.isForecast ? 'Forecast' : 'Actual'},${r.rides},${r.revenue},${r.growth ?? "—"},${r.avgPrice}`)
     .join("\n");
   const blob = new Blob([header + body], { type: "text/csv;charset=utf-8;" });
   const url = URL.createObjectURL(blob);
   const a = document.createElement("a");
   a.href = url;
-  a.download = `bikesense_report_${new Date().toISOString().slice(0, 10)}.csv`;
+  a.download = `bikesense_ml_report_${new Date().toISOString().slice(0, 10)}.csv`;
   a.click();
   URL.revokeObjectURL(url);
 }
@@ -75,9 +61,13 @@ function exportCSV(rows: MonthRow[]) {
 // ─── Chart Tooltip ────────────────────────────────────────────────────────────
 function ChartTooltip({ active, payload, label }: any) {
   if (!active || !payload?.length) return null;
+  const isForecast = payload[0]?.payload?.isForecast;
   return (
     <div className="glass rounded-lg p-3 text-xs border border-white/5">
-      <p className="text-slate-400 mb-1 font-semibold">{label}</p>
+      <p className="text-slate-400 mb-1 font-semibold flex items-center gap-2">
+        {label}
+        {isForecast && <span className="text-purple-400 bg-purple-500/10 px-1.5 py-0.5 rounded text-[10px] uppercase">ML Forecast</span>}
+      </p>
       {payload.map((p: any) => (
         <p key={p.name} className="flex items-center gap-2 mt-0.5">
           <span className="w-2 h-2 rounded-full" style={{ background: p.color }} />
@@ -109,7 +99,6 @@ const REPORT_TYPES = [
 export default function ReportsPage() {
   const [monthlyData, setMonthlyData] = useState<MonthRow[]>([]);
   const [loading, setLoading]         = useState(true);
-  const [dataSource, setDataSource]   = useState<"live" | "fallback">("fallback");
   const [activeReport, setActiveReport] = useState("overview");
   const [generating, setGenerating]   = useState<string | null>(null);
 
@@ -118,16 +107,14 @@ export default function ReportsPage() {
     try {
       const raw = await getMonthlyReport();
       if (raw && raw.length > 0) {
-        setMonthlyData(transformRaw(raw).slice(-12));
-        setDataSource("live");
+        // ML Data successfully loaded! (Historical + Forecast)
+        setMonthlyData(transformRaw(raw));
       } else {
-        // Backend returned empty — use fallback
-        setMonthlyData(transformRaw(FALLBACK_MONTHLY));
-        setDataSource("fallback");
+        // Empty array
+        setMonthlyData([]);
       }
     } catch {
-      setMonthlyData(transformRaw(FALLBACK_MONTHLY));
-      setDataSource("fallback");
+      setMonthlyData([]);
     } finally {
       setLoading(false);
     }
@@ -136,12 +123,13 @@ export default function ReportsPage() {
   useEffect(() => { loadData(); }, []);
 
   // ── Derived KPIs ──
-  const total12mRevenue  = monthlyData.reduce((a, r) => a + r.revenue, 0).toFixed(1);
-  const total12mRides    = monthlyData.reduce((a, r) => a + r.rides, 0);
+  // Show totals for the current dataset. 
+  const totalRevenue  = monthlyData.reduce((a, r) => a + r.revenue, 0).toFixed(1);
+  const totalRides    = monthlyData.reduce((a, r) => a + r.rides, 0);
   const lastGrowth       = monthlyData.at(-1)?.growth ?? null;
   const avgRevenuePerRide =
-    total12mRides > 0
-      ? ((parseFloat(total12mRevenue) * 100000) / total12mRides).toFixed(0)
+    totalRides > 0
+      ? ((parseFloat(totalRevenue) * 100000) / totalRides).toFixed(0)
       : "0";
   const bestMonth = monthlyData.reduce(
     (best, r) => (r.revenue > (best?.revenue ?? 0) ? r : best),
@@ -150,6 +138,10 @@ export default function ReportsPage() {
 
   // ── Export handlers ──
   const handleExport = async (type: string) => {
+    if (monthlyData.length === 0) {
+      toast.error("No data available to export.");
+      return;
+    }
     setGenerating(type);
     if (type === "Raw Data CSV") {
       exportCSV(monthlyData);
@@ -169,16 +161,16 @@ export default function ReportsPage() {
         <div>
           <h1 className="font-display font-bold text-2xl text-white flex items-center gap-2">
             <FileBarChart2 className="w-6 h-6 text-purple-400" />
-            Reports &amp; Exports
+            ML Performance Analytics
           </h1>
           <p className="text-slate-500 text-sm mt-0.5">
-            12-month performance analytics · Bangalore Fleet
+            Historical data + real-time SARIMA model forecasts
           </p>
         </div>
         <div className="flex items-center gap-3">
-          <span className={`badge-${dataSource === "live" ? "success" : "info"} flex items-center gap-1.5`}>
-            <span className={`w-1.5 h-1.5 rounded-full animate-pulse ${dataSource === "live" ? "bg-green-400" : "bg-blue-400"}`} />
-            {dataSource === "live" ? "Live Data" : "Demo Data"}
+          <span className="badge-success flex items-center gap-1.5">
+            <span className="w-1.5 h-1.5 rounded-full animate-pulse bg-emerald-400" />
+            ML Engine Live
           </span>
           <button
             onClick={loadData}
@@ -195,7 +187,13 @@ export default function ReportsPage() {
       {loading ? (
         <div className="flex flex-col justify-center items-center py-24 gap-4">
           <div className="w-10 h-10 border-2 border-purple-500 border-t-transparent rounded-full animate-spin" />
-          <p className="text-slate-500 text-sm">Loading report data…</p>
+          <p className="text-slate-500 text-sm">Querying ML Engine &amp; Historical Data…</p>
+        </div>
+      ) : monthlyData.length === 0 ? (
+        <div className="glass rounded-xl p-12 text-center text-slate-400 flex flex-col items-center justify-center">
+          <FileBarChart2 className="w-12 h-12 text-slate-500 mb-4 opacity-50" />
+          <h3 className="text-lg font-semibold text-white mb-2">No Data Available</h3>
+          <p className="text-sm">Ensure the ML backend is running. No fallback static data is used.</p>
         </div>
       ) : (
         <>
@@ -203,8 +201,8 @@ export default function ReportsPage() {
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
             {[
               {
-                label: "12-Month Revenue",
-                value: `₹${total12mRevenue}L`,
+                label: "Total Revenue (inc. Forecast)",
+                value: `₹${totalRevenue}L`,
                 sub: lastGrowth !== null
                   ? `${lastGrowth >= 0 ? "↑" : "↓"} ${Math.abs(lastGrowth)}% vs prior month`
                   : "—",
@@ -212,9 +210,9 @@ export default function ReportsPage() {
                 icon: DollarSign, color: "#00f5ff",
               },
               {
-                label: "12-Month Rides",
-                value: total12mRides.toLocaleString(),
-                sub: "Total trips completed",
+                label: "Total Rides",
+                value: totalRides.toLocaleString(),
+                sub: "Actual + Predicted trips",
                 subColor: "text-slate-500",
                 icon: Bike, color: "#6366f1",
               },
@@ -285,17 +283,18 @@ export default function ReportsPage() {
             >
               {activeReport === "overview" && (
                 <>
-                  <h3 className="font-display font-semibold text-white mb-1">12-Month Performance Overview</h3>
-                  <p className="text-xs text-slate-500 mb-5">Rides volume and revenue side-by-side</p>
+                  <h3 className="font-display font-semibold text-white mb-1">Performance Overview</h3>
+                  <p className="text-xs text-slate-500 mb-5">Historical vs Forecasted metrics</p>
                   <div className="grid lg:grid-cols-2 gap-6">
                     <div>
                       <p className="text-xs text-slate-400 mb-2">Monthly Rides</p>
                       <ResponsiveContainer width="100%" height={220}>
                         <BarChart data={monthlyData}>
                           <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.04)" />
-                          <XAxis dataKey="month" tick={{ fontSize: 9 }} interval={1} />
+                          <XAxis dataKey="month" tick={{ fontSize: 9 }} interval="preserveStartEnd" minTickGap={20} />
                           <YAxis tick={{ fontSize: 9 }} />
                           <Tooltip content={<ChartTooltip />} />
+                          {/* We can use a custom bar color via Cell if needed, but for simplicity: */}
                           <Bar dataKey="rides" name="Rides" fill="#6366f1" radius={[4, 4, 0, 0]} />
                         </BarChart>
                       </ResponsiveContainer>
@@ -305,7 +304,7 @@ export default function ReportsPage() {
                       <ResponsiveContainer width="100%" height={220}>
                         <LineChart data={monthlyData}>
                           <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.04)" />
-                          <XAxis dataKey="month" tick={{ fontSize: 9 }} interval={1} />
+                          <XAxis dataKey="month" tick={{ fontSize: 9 }} interval="preserveStartEnd" minTickGap={20} />
                           <YAxis tick={{ fontSize: 9 }} />
                           <Tooltip content={<ChartTooltip />} />
                           <Line type="monotone" dataKey="revenue" name="Revenue (₹L)" stroke="#00f5ff" strokeWidth={2.5} dot={{ fill: "#00f5ff", r: 3 }} />
@@ -319,7 +318,7 @@ export default function ReportsPage() {
               {activeReport === "revenue" && (
                 <>
                   <h3 className="font-display font-semibold text-white mb-1">Revenue Trend</h3>
-                  <p className="text-xs text-slate-500 mb-5">Monthly revenue with area gradient fill</p>
+                  <p className="text-xs text-slate-500 mb-5">Monthly revenue trajectory including SARIMA predictions</p>
                   <ResponsiveContainer width="100%" height={280}>
                     <AreaChart data={monthlyData}>
                       <defs>
@@ -329,7 +328,7 @@ export default function ReportsPage() {
                         </linearGradient>
                       </defs>
                       <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.04)" />
-                      <XAxis dataKey="month" tick={{ fontSize: 10 }} />
+                      <XAxis dataKey="month" tick={{ fontSize: 10 }} interval="preserveStartEnd" minTickGap={20} />
                       <YAxis tick={{ fontSize: 10 }} />
                       <Tooltip content={<ChartTooltip />} />
                       <Area type="monotone" dataKey="revenue" name="Revenue (₹L)" stroke="#00f5ff" fill="url(#revGrad2)" strokeWidth={2.5} dot={{ fill: "#00f5ff", r: 3 }} />
@@ -341,7 +340,7 @@ export default function ReportsPage() {
               {activeReport === "rides" && (
                 <>
                   <h3 className="font-display font-semibold text-white mb-1">Rides Volume</h3>
-                  <p className="text-xs text-slate-500 mb-5">Monthly total trips completed</p>
+                  <p className="text-xs text-slate-500 mb-5">Total trips completed and forecasted</p>
                   <ResponsiveContainer width="100%" height={280}>
                     <AreaChart data={monthlyData}>
                       <defs>
@@ -351,7 +350,7 @@ export default function ReportsPage() {
                         </linearGradient>
                       </defs>
                       <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.04)" />
-                      <XAxis dataKey="month" tick={{ fontSize: 10 }} />
+                      <XAxis dataKey="month" tick={{ fontSize: 10 }} interval="preserveStartEnd" minTickGap={20} />
                       <YAxis tick={{ fontSize: 10 }} />
                       <Tooltip content={<ChartTooltip />} />
                       <Area type="monotone" dataKey="rides" name="Rides" stroke="#6366f1" fill="url(#ridesGrad)" strokeWidth={2.5} dot={{ fill: "#6366f1", r: 3 }} />
@@ -367,14 +366,10 @@ export default function ReportsPage() {
                   <ResponsiveContainer width="100%" height={280}>
                     <BarChart data={monthlyData.filter(r => r.growth !== null)}>
                       <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.04)" />
-                      <XAxis dataKey="month" tick={{ fontSize: 10 }} />
+                      <XAxis dataKey="month" tick={{ fontSize: 10 }} interval="preserveStartEnd" minTickGap={20} />
                       <YAxis tick={{ fontSize: 10 }} unit="%" />
                       <Tooltip content={<ChartTooltip />} />
-                      <Bar dataKey="growth" name="Growth" radius={[4, 4, 0, 0]}
-                        fill="#00ff88"
-                        // color positive/negative dynamically via cell would need Cell import;
-                        // using a single consistent accent color is cleaner
-                      />
+                      <Bar dataKey="growth" name="Growth" radius={[4, 4, 0, 0]} fill="#00ff88" />
                     </BarChart>
                   </ResponsiveContainer>
                 </>
@@ -384,7 +379,7 @@ export default function ReportsPage() {
 
           {/* Monthly Breakdown Table */}
           <div className="glass rounded-xl p-6">
-            <h3 className="font-display font-semibold text-white mb-4">Monthly Breakdown</h3>
+            <h3 className="font-display font-semibold text-white mb-4">Detailed Breakdown</h3>
             <div className="overflow-x-auto">
               <table className="w-full text-sm">
                 <thead>
@@ -403,7 +398,14 @@ export default function ReportsPage() {
                       transition={{ delay: i * 0.03 }}
                       className="border-b border-white/3 hover:bg-white/2 transition-colors"
                     >
-                      <td className="py-3 px-3 font-medium text-white">{r.month}</td>
+                      <td className="py-3 px-3 font-medium text-white flex items-center gap-2">
+                        {r.month}
+                        {r.isForecast && (
+                          <span className="text-[10px] uppercase tracking-wider text-purple-400 bg-purple-500/10 px-1.5 py-0.5 rounded">
+                            Forecast
+                          </span>
+                        )}
+                      </td>
                       <td className="py-3 px-3 text-slate-300">{r.rides.toLocaleString()}</td>
                       <td className="py-3 px-3 font-mono text-white">₹{r.revenue}L</td>
                       <td className="py-3 px-3">
@@ -420,15 +422,19 @@ export default function ReportsPage() {
                       </td>
                       <td className="py-3 px-3 font-mono text-slate-300">₹{r.avgPrice}</td>
                       <td className="py-3 px-3">
-                        <span className={
-                          r.growth && r.growth > 10
-                            ? "badge-success"
-                            : r.growth && r.growth < 0
-                            ? "badge-danger"
-                            : "badge-warning"
-                        }>
-                          {r.growth && r.growth > 10 ? "Strong" : r.growth && r.growth < 0 ? "Decline" : "Steady"}
-                        </span>
+                        {r.isForecast ? (
+                          <span className="badge-info">Predicted</span>
+                        ) : (
+                          <span className={
+                            r.growth && r.growth > 10
+                              ? "badge-success"
+                              : r.growth && r.growth < 0
+                              ? "badge-danger"
+                              : "badge-warning"
+                          }>
+                            {r.growth && r.growth > 10 ? "Strong" : r.growth && r.growth < 0 ? "Decline" : "Steady"}
+                          </span>
+                        )}
                       </td>
                     </motion.tr>
                   ))}
@@ -445,8 +451,8 @@ export default function ReportsPage() {
         <div className="grid md:grid-cols-3 gap-4">
           {[
             { type: "Monthly PDF",     desc: "Full monthly analytics with charts and KPIs", icon: "📊", format: "PDF" },
-            { type: "Investor Report", desc: "Executive summary with forecasts and growth",  icon: "💼", format: "PDF" },
-            { type: "Raw Data CSV",    desc: "Complete 12-month dataset for custom analysis", icon: "📋", format: "CSV" },
+            { type: "Investor Report", desc: "Executive summary with ML forecasts and growth",  icon: "💼", format: "PDF" },
+            { type: "Raw Data CSV",    desc: "Complete dataset including ML predictions", icon: "📋", format: "CSV" },
           ].map(r => (
             <div key={r.type} className="glass-light rounded-xl p-4">
               <div className="text-2xl mb-2">{r.icon}</div>
@@ -454,8 +460,8 @@ export default function ReportsPage() {
               <p className="text-xs text-slate-500 mb-3">{r.desc}</p>
               <button
                 onClick={() => handleExport(r.type)}
-                disabled={generating === r.type || loading}
-                className="btn-ghost w-full flex items-center justify-center gap-2 text-sm py-2"
+                disabled={generating === r.type || loading || monthlyData.length === 0}
+                className="btn-ghost w-full flex items-center justify-center gap-2 text-sm py-2 disabled:opacity-50"
               >
                 {generating === r.type ? (
                   <><div className="w-3 h-3 border border-white/30 border-t-white rounded-full animate-spin" />Generating…</>

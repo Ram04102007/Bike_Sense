@@ -223,12 +223,35 @@ async def monthly_report(request: Request):
     engine = request.app.state.engine
     import pandas as pd
     df = engine.df
+    
+    # 1. Historical data
     monthly = df.groupby(df["dteday"].dt.to_period("M")).agg(
         rides=("cnt","sum"),revenue=("final_price","sum")
     ).reset_index()
     monthly["period"] = monthly["dteday"].astype(str)
     monthly["revenue"] = (monthly["revenue"]/1000).round(1)
-    return {"success": True, "data": monthly[["period","rides","revenue"]].to_dict(orient="records")}
+    historical_data = monthly[["period","rides","revenue"]].to_dict(orient="records")
+    
+    # 2. Forecasted data from SARIMA
+    forecast_data = engine.get_monthly_forecast()
+    avg_price = df["final_price"].mean()
+    
+    forecast_records = []
+    for f in forecast_data:
+        dt = pd.to_datetime(f["dt"])
+        period = f"{dt.year}-{dt.month:02d}"
+        rides = int(f["demand"])
+        revenue = round((rides * avg_price) / 1000, 1)
+        
+        forecast_records.append({
+            "period": period,
+            "rides": rides,
+            "revenue": revenue,
+            "is_forecast": True
+        })
+        
+    combined_data = historical_data + forecast_records
+    return {"success": True, "data": combined_data}
 
 
 @router.get("/zone-intelligence")
