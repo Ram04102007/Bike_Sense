@@ -29,10 +29,23 @@ const mockPrediction = (date: string, time: string, location: string, bike_model
   };
 };
 
-const mockForecast = (days: number) =>
+const mockHourlyForecast = (hours: number) =>
+  Array.from({ length: hours }, (_, i) => {
+    const d = new Date(Date.now() + i * 3600000);
+    const hour = d.getHours();
+    // Peak hours: 8-10 AM and 5-8 PM
+    const isPeak = (hour >= 8 && hour <= 10) || (hour >= 17 && hour <= 20);
+    const baseDemand = isPeak ? 800 : 300;
+    return {
+      dt: d.toISOString(),
+      demand: Math.round(baseDemand + (Math.random() - 0.5) * 100),
+    };
+  });
+
+const mockDailyForecast = (days: number) =>
   Array.from({ length: days }, (_, i) => ({
     dt: new Date(Date.now() + i * 86400000).toISOString().split("T")[0],
-    demand: Math.round(400 + 300 * Math.sin((i / days) * Math.PI) + (Math.random() - 0.5) * 80),
+    demand: Math.round(15000 + 5000 * Math.sin((i / days) * Math.PI) + (Math.random() - 0.5) * 2000),
   }));
 
 // ─── Safe Fetch ───────────────────────────────────────────────────────────────
@@ -114,9 +127,9 @@ export const predictPrice = (input: PredictInput) =>
   );
 
 // ─── Forecast Series ──────────────────────────────────────────────────────────
-export const getShortForecast   = () => apiFetch<ForecastPoint[]>(`${ML_API}/forecast/short`,  {}, mockForecast(7 * 24));
-export const getDailyForecast   = () => apiFetch<ForecastPoint[]>(`${ML_API}/forecast/daily`,  {}, mockForecast(30));
-export const getMonthlyForecast = () => apiFetch<ForecastPoint[]>(`${ML_API}/forecast/monthly`, {}, mockForecast(12));
+export const getShortForecast   = () => apiFetch<ForecastPoint[]>(`${ML_API}/forecast/short`,  {}, mockHourlyForecast(7 * 24));
+export const getDailyForecast   = () => apiFetch<ForecastPoint[]>(`${ML_API}/forecast/daily`,  {}, mockDailyForecast(30));
+export const getMonthlyForecast = () => apiFetch<ForecastPoint[]>(`${ML_API}/forecast/monthly`, {}, mockDailyForecast(365));
 
 // ─── Admin APIs ───────────────────────────────────────────────────────────────
 export const getAdminRevenue = () =>
@@ -125,19 +138,43 @@ export const getAdminRevenue = () =>
     peak_hour: 8, monthly_rides: 2109, occupancy_pct: 73, active_bikes: 847, repeat_rate: 68.4,
   });
 
+const mockHeatmap = [
+  { area: "Indiranagar", hour: 8, demand: 85 },
+  { area: "Koramangala", hour: 18, demand: 92 },
+  { area: "Whitefield", hour: 9, demand: 78 },
+  { area: "HSR Layout", hour: 19, demand: 88 },
+  { area: "Marathahalli", hour: 17, demand: 70 },
+];
+
 export const getHeatmapData = (date?: string) => {
   const url = date ? `${ML_API}/admin/heatmap?date=${date}` : `${ML_API}/admin/heatmap`;
-  return apiFetch<{ area: string; hour: number; demand: number }[]>(url, {}, []);
+  return apiFetch<{ area: string; hour: number; demand: number }[]>(url, {}, mockHeatmap);
 };
 
 export const getFleetData         = () => apiFetch<any[]>(`${ML_API}/admin/fleet`, {}, []);
 export const getBikeModels        = () => apiFetch<any[]>(`${ML_API}/admin/fleet/models`, {}, []);
-export const getLiveAlerts        = () => apiFetch<any[]>(`${ML_API}/admin/alerts`, {}, []);
-export const getZoneIntelligence  = () => apiFetch<any[]>(`${ML_API}/admin/zone-intelligence`, {}, []);
+
+const mockAlerts = [
+  { type: "warning", msg: "Indiranagar demand spike expected 5–7 PM", time: "10 min ago" },
+  { type: "success", msg: "Fleet automatically rebalanced in Whitefield", time: "24 min ago" },
+  { type: "warning", msg: "Low battery: 5 Ather 450X in Koramangala", time: "1 hr ago" },
+];
+export const getLiveAlerts        = () => apiFetch<any[]>(`${ML_API}/admin/alerts`, {}, mockAlerts);
+
+const mockZoneIntelligence = [
+  { zone: "Koramangala", rides: 4210, revenue: 315000, surge: 1.25 },
+  { zone: "Indiranagar", rides: 3890, revenue: 284000, surge: 1.15 },
+  { zone: "HSR Layout", rides: 3450, revenue: 241000, surge: 1.08 },
+  { zone: "Whitefield", rides: 3120, revenue: 215000, surge: 1.00 },
+  { zone: "Marathahalli", rides: 2850, revenue: 198000, surge: 1.00 },
+];
+export const getZoneIntelligence  = () => apiFetch<any[]>(`${ML_API}/admin/zone-intelligence`, {}, mockZoneIntelligence);
+
 export const getCustomerAnalytics = () => apiFetch<any>(`${ML_API}/admin/customers/analytics`, {}, {});
 export const getMonthlyReport     = () => apiFetch<any[]>(`${ML_API}/admin/reports/monthly`, {}, []);
 export const getPricingRec        = (area: string, hour: number, is_weekend = false) =>
   apiFetch<any>(`${ML_API}/admin/pricing/recommend?area=${encodeURIComponent(area)}&hour=${hour}&is_weekend=${is_weekend}`, {}, null);
+
 
 // ─── Consumer APIs ────────────────────────────────────────────────────────────
 export const getBikes = (area?: string, type?: string) =>

@@ -29,8 +29,8 @@ function aggregateToDays(points: ForecastPoint[]): { day: string; demand: number
   const order = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
   return order.filter(d => buckets[d]).map(d => ({
     day: d,
-    demand: Math.round(buckets[d].demand / buckets[d].count),
-    revenue: Math.round(buckets[d].revenue / buckets[d].count),
+    demand: Math.round(buckets[d].demand),
+    revenue: Math.round(buckets[d].revenue),
   }));
 }
 
