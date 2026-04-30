@@ -324,16 +324,43 @@ class ModelEngine:
         }
 
     def get_price_recommendation(self, area: str, hour: int, is_weekend: bool = False) -> dict:
-        area_w = {"Indiranagar":1.3,"Koramangala":1.2,"Whitefield":1.1,"Marathahalli":1.0,
-                  "HSR Layout":1.15,"Jayanagar":0.9,"Electronic City":0.95,"Hebbal":0.85}.get(area,1.0)
-        hr_factor = float(self.hourly_profile_norm[hour])
-        demand_idx = area_w * hr_factor * (1.1 if is_weekend else 1.0)
-        base_dem   = self.hourly_ts["cnt"].mean() * demand_idx
-        surge      = self.compute_surge(base_dem)
-        price      = round(BASE_PRICE * surge, 2)
-        return {"area":area,"hour":hour,"recommended_price":price,"surge_multiplier":surge,
-                "demand_index":round(demand_idx,2),"strategy":
-                    "Surge pricing active" if surge>1.0 else "Standard pricing"}
+        area_weights = {"Indiranagar":1.3,"Koramangala":1.2,"Whitefield":1.1,"Marathahalli":1.0,
+                        "HSR Layout":1.15,"Jayanagar":0.9,"Electronic City":0.95,"Hebbal":0.85}
+        area_w     = area_weights.get(area, 1.0)
+        hr_factor  = float(self.hourly_profile_norm[hour])
+        wknd_boost = 1.1 if is_weekend else 1.0
+        demand_idx = area_w * hr_factor * wknd_boost
+
+        # Use actual SARIMA mean as the demand base
+        sarima_mean = float(self.hourly_ts["cnt"].mean())
+        base_dem    = sarima_mean * demand_idx
+
+        surge = self.compute_surge(base_dem)
+        price = round(BASE_PRICE * surge, 2)
+
+        # Demand percentile among all hourly observations
+        pct = float((self.hourly_ts["cnt"] < base_dem).mean() * 100)
+
+        tier_labels = {1.00: "Standard", 1.08: "Moderate", 1.17: "High", 1.25: "Peak Surge"}
+        tier = tier_labels.get(surge, "Standard")
+
+        return {
+            "area":              area,
+            "hour":              hour,
+            "is_weekend":        is_weekend,
+            "base_price":        BASE_PRICE,          # ML-defined constant
+            "surge_multiplier":  surge,
+            "recommended_price": price,
+            "demand_index":      round(demand_idx, 3),
+            "demand_percentile": round(pct, 1),
+            "sarima_base_demand":round(base_dem, 1),
+            "area_weight":       area_w,
+            "hourly_factor":     round(hr_factor, 3),
+            "weekend_boost":     wknd_boost,
+            "tier":              tier,
+            "strategy":          "Surge pricing active" if surge > 1.0 else "Standard pricing",
+            "savings_vs_peak":   round(81.25 - price, 2),
+        }
 
     def get_zone_intelligence(self):
         """Dynamic zone performance metrics based on recent 30-day data and ML weighting."""
