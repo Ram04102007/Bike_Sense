@@ -59,7 +59,13 @@ export interface PredictionResult {
   savings_vs_peak: number;
 }
 
-export interface ForecastPoint { dt: string; demand: number; }
+export interface ForecastPoint {
+  dt: string;
+  demand: number;
+  lower?: number;
+  upper?: number;
+  price?: number;
+}
 
 export interface RevenueData {
   total_rides: number;
@@ -113,6 +119,8 @@ export const predictPrice = (input: PredictInput) =>
 export const getShortForecast   = () => apiFetch<ForecastPoint[]>(`${ML_API}/forecast/short`);
 export const getDailyForecast   = () => apiFetch<ForecastPoint[]>(`${ML_API}/forecast/daily`);
 export const getMonthlyForecast = () => apiFetch<ForecastPoint[]>(`${ML_API}/forecast/monthly`);
+export const getForecastMetrics = () => apiFetch<{ short_aic: string, daily_aic: string, monthly_aic: string }>(`${ML_API}/forecast/metrics`);
+export const getForecastInsights = () => apiFetch<Array<{ emoji: string, title: string, desc: string, tag: string }>>(`${ML_API}/forecast/insights`);
 
 // ─── Admin APIs ───────────────────────────────────────────────────────────────
 export const getAdminRevenue = () => apiFetch<RevenueData>(`${ML_API}/admin/revenue`);

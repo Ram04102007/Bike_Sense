@@ -65,6 +65,20 @@ async def monthly_forecast(request: Request):
     return {"success": True, "data": engine.get_monthly_forecast()}
 
 
+@router.get("/forecast/metrics")
+async def forecast_metrics(request: Request):
+    """Model AIC and fit statistics."""
+    engine = request.app.state.engine
+    return {"success": True, "data": engine.get_model_metrics()}
+
+
+@router.get("/forecast/insights")
+async def forecast_insights(request: Request):
+    """Dynamic seasonal and event insights based on historical and forecasted data."""
+    engine = request.app.state.engine
+    return {"success": True, "data": engine.get_seasonal_insights()}
+
+
 @router.get("/areas")
 async def get_areas():
     return {"areas": ["Indiranagar","Koramangala","Whitefield","Marathahalli",

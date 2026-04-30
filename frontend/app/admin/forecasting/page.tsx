@@ -6,7 +6,7 @@ import {
   XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, ReferenceLine,
 } from "recharts";
 import { Brain, TrendingUp, Calendar, Clock, Download, RefreshCw, WifiOff } from "lucide-react";
-import { getShortForecast, getDailyForecast, getHeatmapData, type ForecastPoint } from "@/lib/api";
+import { getShortForecast, getDailyForecast, getHeatmapData, getForecastMetrics, getForecastInsights, type ForecastPoint } from "@/lib/api";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 interface ChartPoint {
@@ -22,17 +22,16 @@ interface HeatRow { area: string; hours: number[] }
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 /** Convert raw hourly forecast → chart points with CI bands */
 function toHourlyChart(points: ForecastPoint[]): ChartPoint[] {
-  return points.map((p, i) => {
+  return points.map(p => {
     const d = new Date(p.dt);
     const day = ["Sun","Mon","Tue","Wed","Thu","Fri","Sat"][d.getDay()];
     const hr  = d.getHours().toString().padStart(2, "0");
-    const isRush = (d.getHours() >= 7 && d.getHours() <= 9) || (d.getHours() >= 17 && d.getHours() <= 20);
     return {
       label: `${day} ${hr}:00`,
       demand: Math.round(p.demand),
-      upper:  Math.round(p.demand * 1.18),
-      lower:  Math.round(Math.max(0, p.demand * 0.82)),
-      price:  isRush ? 81.25 : d.getHours() >= 10 && d.getHours() <= 15 ? 65 : 70.2,
+      upper:  Math.round(p.upper || p.demand * 1.18),
+      lower:  Math.round(p.lower || Math.max(0, p.demand * 0.82)),
+      price:  p.price,
     };
   });
 }
@@ -46,8 +45,8 @@ function toDailyChart(points: ForecastPoint[]): ChartPoint[] {
     return {
       label:  day,
       demand: Math.round(p.demand),
-      upper:  Math.round(p.demand * 1.15),
-      lower:  Math.round(Math.max(0, p.demand * 0.85)),
+      upper:  Math.round(p.upper || p.demand * 1.15),
+      lower:  Math.round(p.lower || Math.max(0, p.demand * 0.85)),
     };
   });
 }
@@ -103,7 +102,8 @@ export default function ForecastingPage() {
   const [heatmapData, setHeatmapData] = useState<HeatRow[]>([]);
   const [loading, setLoading]   = useState(true);
   const [isLive, setIsLive]     = useState(false);
-  const [modelInfo, setModelInfo] = useState({ shortAic: "—", dailyAic: "—" });
+  const [modelInfo, setModelInfo] = useState({ short_aic: "—", daily_aic: "—", monthly_aic: "—" });
+  const [insights, setInsights]   = useState<Array<{emoji: string, title: string, desc: string, tag: string}>>([]);
 
   const [heatmapDate, setHeatmapDate] = useState("");
   const [heatmapLoading, setHeatmapLoading] = useState(false);
@@ -127,10 +127,12 @@ export default function ForecastingPage() {
   const loadData = async () => {
     setLoading(true);
     try {
-      const [shortRaw, dailyRaw, heatRaw] = await Promise.all([
+      const [shortRaw, dailyRaw, heatRaw, metrics, dynInsights] = await Promise.all([
         getShortForecast(),
         getDailyForecast(),
         getHeatmapData(heatmapDate || undefined),
+        getForecastMetrics(),
+        getForecastInsights(),
       ]);
       const hourly = toHourlyChart(shortRaw);
       setHourlyData(hourly);
@@ -138,7 +140,8 @@ export default function ForecastingPage() {
       if (heatRaw.length > 0) setHeatmapData(buildHeatmap(heatRaw));
       // If we got 168 hourly points it's real SARIMA output
       setIsLive(shortRaw.length === 168);
-      setModelInfo({ shortAic: "14,820", dailyAic: "3,421" }); // from engine logs
+      setModelInfo(metrics);
+      setInsights(dynInsights);
     } catch (e) {
       console.error("Forecasting page error:", e);
     } finally {
@@ -187,9 +190,9 @@ export default function ForecastingPage() {
       {/* Model Cards */}
       <div className="grid md:grid-cols-3 gap-4">
         {[
-          { label: "Short-Term",   order: "SARIMA(0,1,1)(0,1,1,24)", horizon: "7-day hourly",  aic: modelInfo.shortAic, color: "#6366f1" },
-          { label: "Medium-Term",  order: "SARIMA(1,1,2)(1,1,1,7)",  horizon: "30-day daily",  aic: modelInfo.dailyAic, color: "#00f5ff" },
-          { label: "Long-Term",    order: "SARIMA(0,1,0)(0,1,1,12)", horizon: "12-month",      aic: "842",              color: "#00ff88" },
+          { label: "Short-Term",   order: "SARIMA(0,1,1)(0,1,1,24)", horizon: "7-day hourly",  aic: modelInfo.short_aic, color: "#6366f1" },
+          { label: "Medium-Term",  order: "SARIMA(1,1,2)(1,1,1,7)",  horizon: "30-day daily",  aic: modelInfo.daily_aic, color: "#00f5ff" },
+          { label: "Long-Term",    order: "SARIMA(0,1,0)(0,1,1,12)", horizon: "12-month",      aic: modelInfo.monthly_aic, color: "#00ff88" },
         ].map(m => (
           <div key={m.label} className="glass rounded-xl p-5">
             <div className="flex items-center justify-between mb-3">
@@ -359,11 +362,13 @@ export default function ForecastingPage() {
       <div className="glass rounded-xl p-6">
         <h3 className="font-display font-semibold text-white mb-4">Seasonal &amp; Event Insights</h3>
         <div className="grid md:grid-cols-3 gap-4">
-          {[
-            { emoji: "🌧️", title: "Monsoon Impact",  desc: "June–September: 30–40% demand drop during heavy rain. Pre-position indoor stations.", tag: "Seasonal" },
-            { emoji: "🎉", title: "Diwali Spike",    desc: "Expected 2.3× demand surge Oct 20–24. Activate peak pricing + extra fleet.", tag: "Festival" },
-            { emoji: "📈", title: "Weekend Pattern", desc: "Saturday rides are 47% higher than Tuesday. Rebalance by Friday 10 PM.", tag: "Weekly" },
-          ].map(i => (
+          {loading ? (
+            <>
+              <Skeleton className="h-32" />
+              <Skeleton className="h-32" />
+              <Skeleton className="h-32" />
+            </>
+          ) : insights.map(i => (
             <div key={i.title} className="glass-light rounded-xl p-4">
               <div className="text-2xl mb-2">{i.emoji}</div>
               <div className="text-sm font-semibold text-white mb-1">{i.title}</div>

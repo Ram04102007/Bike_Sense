@@ -247,16 +247,89 @@ class ModelEngine:
 
     # ─── Forecast Series for Charts ──────────────────────────────────────────
     def get_short_forecast(self):
-        return [{"dt": str(idx), "demand": round(float(v),1)}
-                for idx,v in self._fc_short["mean"].items()]
+        res = []
+        for i, (idx, v) in enumerate(self._fc_short["mean"].items()):
+            demand = float(v)
+            surge = self.compute_surge(demand)
+            price = round(BASE_PRICE * surge, 2)
+            lower = float(self._fc_short["ci"].iloc[i, 0])
+            upper = float(self._fc_short["ci"].iloc[i, 1])
+            res.append({
+                "dt": str(idx), 
+                "demand": round(demand, 1),
+                "lower": round(max(0, lower), 1),
+                "upper": round(upper, 1),
+                "price": price,
+                "surge_multiplier": surge
+            })
+        return res
 
     def get_daily_forecast(self):
-        return [{"dt": str(idx.date()), "demand": round(float(v),1)}
-                for idx,v in self._fc_med["mean"].items()]
+        res = []
+        for i, (idx, v) in enumerate(self._fc_med["mean"].items()):
+            demand = float(v)
+            lower = float(self._fc_med["ci"].iloc[i, 0])
+            upper = float(self._fc_med["ci"].iloc[i, 1])
+            res.append({
+                "dt": str(idx.date()), 
+                "demand": round(demand, 1),
+                "lower": round(max(0, lower), 1),
+                "upper": round(upper, 1)
+            })
+        return res
 
     def get_monthly_forecast(self):
         return [{"dt": str(idx.date()), "demand": round(float(v),1)}
                 for idx,v in self._fc_long["mean"].items()]
+
+    def get_model_metrics(self):
+        return {
+            "short_aic": f"{self.fit_hourly.aic:,.0f}" if self.fit_hourly else "—",
+            "daily_aic": f"{self.fit_daily.aic:,.0f}" if self.fit_daily else "—",
+            "monthly_aic": f"{self.fit_monthly.aic:,.0f}" if self.fit_monthly else "—"
+        }
+
+    def get_seasonal_insights(self):
+        df = self.df
+        
+        # 1. Weekend Pattern
+        wknd = float(df[df["weekend_flag"]==1]["cnt"].mean())
+        wkday = float(df[df["weekend_flag"]==0]["cnt"].mean())
+        diff_pct = round(abs(wknd - wkday) / wkday * 100)
+        word = "higher" if wknd > wkday else "lower"
+        
+        # 2. Peak Hour
+        peak_hr = int(self.hourly_profile.idxmax())
+        peak_val = float(self.hourly_profile.max())
+        avg_val = float(self.hourly_profile.mean())
+        peak_mult = round(peak_val / avg_val, 1)
+        
+        # 3. Next 7 Days Trend
+        next_7_mean = float(self._fc_short["mean"].mean())
+        historical_mean = float(self.hourly_ts["cnt"].mean())
+        trend_diff = round((next_7_mean - historical_mean) / historical_mean * 100)
+        trend_word = "surge" if trend_diff > 0 else "drop"
+
+        return [
+            {
+                "emoji": "📈", 
+                "title": "Weekend Pattern", 
+                "desc": f"Weekend rides average {diff_pct}% {word} than weekdays based on SARIMA historical analysis.", 
+                "tag": "Weekly"
+            },
+            {
+                "emoji": "⚡", 
+                "title": "Daily Peak", 
+                "desc": f"System demand consistently peaks around {peak_hr}:00, reaching {peak_mult}× the daily average.", 
+                "tag": "Daily"
+            },
+            {
+                "emoji": "🔮", 
+                "title": "7-Day Outlook", 
+                "desc": f"Short-term SARIMA forecast expects a {abs(trend_diff)}% {trend_word} in overall city demand compared to historical average.", 
+                "tag": "Forecast"
+            }
+        ]
 
     def get_heatmap_data(self, target_date: str = None):
         """Return hour × location demand matrix. If target_date is given, predicts for that date."""
