@@ -305,23 +305,29 @@ class ModelEngine:
         return result
 
     def get_revenue_data(self):
-        """Simulate revenue KPIs."""
+        """Revenue KPIs — scaled to realistic city-wide single demand."""
         df = self.df
-        total_rides    = int(df["cnt"].sum())
-        total_revenue  = round(float((df["cnt"]*df["final_price"]).sum()/1000),0)
-        avg_price      = round(float(df["final_price"].mean()),2)
+        COMBO_SCALE = 48   # 8 zones × 6 models per hourly record
+
+        total_rides    = int(df["cnt"].sum() / COMBO_SCALE)
+        total_revenue  = round(float((df["cnt"] * df["final_price"]).sum() / COMBO_SCALE / 100000), 1)
+        avg_price      = round(float(df["final_price"].mean()), 2)   # price per ride stays ₹65–70
         peak_hour      = int(df.groupby("hr")["cnt"].mean().idxmax())
-        last30_mask    = df["dteday"] >= (df["dteday"].max()-pd.Timedelta(days=30))
-        monthly_rides  = int(df[last30_mask]["cnt"].sum())
+        last30_mask    = df["dteday"] >= (df["dteday"].max() - pd.Timedelta(days=30))
+        monthly_rides  = int(df[last30_mask]["cnt"].sum() / COMBO_SCALE)
+        monthly_revenue = round(
+            float((df[last30_mask]["cnt"] * df[last30_mask]["final_price"]).sum() / COMBO_SCALE / 100000), 1
+        )
         return {
-            "total_rides":   total_rides,
-            "total_revenue": total_revenue,
-            "avg_price":     avg_price,
-            "peak_hour":     peak_hour,
-            "monthly_rides": monthly_rides,
-            "occupancy_pct": round(float(df["surge_multiplier"].mean()*75),1),
-            "active_bikes":  847,
-            "repeat_rate":   68.4,
+            "total_rides":    total_rides,
+            "total_revenue":  total_revenue,
+            "avg_price":      avg_price,
+            "peak_hour":      peak_hour,
+            "monthly_rides":  monthly_rides,
+            "monthly_revenue": monthly_revenue,
+            "occupancy_pct":  round(float(df["surge_multiplier"].mean() * 75), 1),
+            "active_bikes":   847,
+            "repeat_rate":    68.4,
         }
 
     def get_price_recommendation(self, area: str, hour: int, is_weekend: bool = False) -> dict:

@@ -223,33 +223,43 @@ async def monthly_report(request: Request):
     engine = request.app.state.engine
     import pandas as pd
     df = engine.df
-    
-    # 1. Historical data
+
+    # Pre-compute per-record revenue (rides × price)
+    df = df.copy()
+    df["ride_revenue"] = df["cnt"] * df["final_price"]
+
+    # Number of zone×model combinations in the synthetic data
+    # cnt is the SUM across 8 zones × 6 models = 48 combos per hour
+    # Divide by 48 to get realistic single city-wide demand
+    COMBO_SCALE = 48
+
+    # 1. Historical monthly data
     monthly = df.groupby(df["dteday"].dt.to_period("M")).agg(
-        rides=("cnt","sum"),revenue=("final_price","sum")
+        rides_raw=("cnt", "sum"),
+        revenue_raw=("ride_revenue", "sum")
     ).reset_index()
-    monthly["period"] = monthly["dteday"].astype(str)
-    monthly["revenue"] = (monthly["revenue"]/1000).round(1)
-    historical_data = monthly[["period","rides","revenue"]].to_dict(orient="records")
-    
-    # 2. Forecasted data from SARIMA
+    monthly["period"]  = monthly["dteday"].astype(str)
+    monthly["rides"]   = (monthly["rides_raw"] / COMBO_SCALE).astype(int)
+    monthly["revenue"] = (monthly["revenue_raw"] / COMBO_SCALE / 100000).round(1)  # → ₹L
+    historical_data = monthly[["period", "rides", "revenue"]].to_dict(orient="records")
+
+    # 2. SARIMA Forecast (trained on the same scale → divide by same factor)
     forecast_data = engine.get_monthly_forecast()
-    avg_price = df["final_price"].mean()
-    
+    avg_price = float(df["final_price"].mean())   # ~₹65–70
+
     forecast_records = []
     for f in forecast_data:
         dt = pd.to_datetime(f["dt"])
-        period = f"{dt.year}-{dt.month:02d}"
-        rides = int(f["demand"])
-        revenue = round((rides * avg_price) / 1000, 1)
-        
+        period  = f"{dt.year}-{dt.month:02d}"
+        rides   = max(0, int(f["demand"] / COMBO_SCALE))          # scale to realistic rides
+        revenue = round((rides * avg_price) / 100000, 1)           # rupees → ₹L
         forecast_records.append({
-            "period": period,
-            "rides": rides,
-            "revenue": revenue,
-            "is_forecast": True
+            "period":      period,
+            "rides":       rides,
+            "revenue":     revenue,
+            "is_forecast": True,
         })
-        
+
     combined_data = historical_data + forecast_records
     return {"success": True, "data": combined_data}
 
