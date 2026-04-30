@@ -199,10 +199,12 @@ class ModelEngine:
 
     # ─── Public Training Entry ────────────────────────────────────────────────
     def train(self):
+        from datetime import datetime
         self._load_data()
         self._build_ts()
         self._fit_models()
         self._precompute_forecasts()
+        self.last_trained = datetime.now()
         logger.info("✅ All SARIMA models trained and forecasts cached.")
 
     # ─── Predict Demand & Price ───────────────────────────────────────────────

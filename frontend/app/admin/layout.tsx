@@ -1,7 +1,8 @@
 "use client";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { apiClient } from "@/lib/api";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   LayoutDashboard, TrendingUp, DollarSign, Bike, Map, Users,
@@ -36,6 +37,30 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
   const [collapsed, setCollapsed] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
   const pathname = usePathname();
+  const [lastTrained, setLastTrained] = useState("just now");
+
+  useEffect(() => {
+    const fetchStatus = async () => {
+      try {
+        const res = await apiClient.get("/admin/system-status");
+        if (res.success && res.last_trained) {
+          const trainedTime = new Date(res.last_trained).getTime();
+          const now = Date.now();
+          const diffMins = Math.floor((now - trainedTime) / 60000);
+          
+          if (diffMins < 1) setLastTrained("just now");
+          else if (diffMins < 60) setLastTrained(`${diffMins}m ago`);
+          else setLastTrained(`${Math.floor(diffMins / 60)}h ago`);
+        }
+      } catch (err) {
+        console.error("Failed to fetch system status", err);
+      }
+    };
+    fetchStatus();
+    // Refresh the status periodically
+    const interval = setInterval(fetchStatus, 60000);
+    return () => clearInterval(interval);
+  }, []);
 
   const Sidebar = ({ mobile=false }) => (
     <div className={`h-full flex flex-col ${mobile?"":"overflow-hidden"}`}>
@@ -76,7 +101,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
               <Zap className="w-3 h-3 text-brand-400" />
               <span className="text-brand-400 font-medium">SARIMA Models Active</span>
             </div>
-            <div>3 models running · Last trained 2h ago</div>
+            <div>3 models running · Last trained {lastTrained}</div>
           </div>
         </div>
       )}

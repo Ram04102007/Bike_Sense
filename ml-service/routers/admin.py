@@ -4,6 +4,15 @@ from typing import Optional
 
 router = APIRouter()
 
+@router.get("/system-status")
+async def get_system_status(request: Request):
+    engine = request.app.state.engine
+    last_trained = getattr(engine, "last_trained", None)
+    if last_trained:
+        # Return ISO string for easy parsing
+        return {"success": True, "last_trained": last_trained.isoformat()}
+    return {"success": False}
+
 
 @router.get("/revenue")
 async def get_revenue(request: Request):
