@@ -23,6 +23,53 @@ async def recommend_price(area: str, hour: int, is_weekend: bool = False, reques
     return {"success": True, "data": engine.get_price_recommendation(area, hour, is_weekend)}
 
 
+@router.get("/pricing/hourly-schedule")
+async def hourly_price_schedule(area: str = "Indiranagar", is_weekend: bool = False, request: Request = None):
+    """Return ML-computed price for every hour (0-23) for the given area."""
+    engine = request.app.state.engine
+    schedule = []
+    for h in range(24):
+        rec = engine.get_price_recommendation(area, h, is_weekend)
+        schedule.append({
+            "hour": h,
+            "hour_label": f"{h:02d}:00",
+            "price": rec["recommended_price"],
+            "surge": rec["surge_multiplier"],
+            "demand_index": rec["demand_index"],
+            "strategy": rec["strategy"],
+        })
+    return {"success": True, "data": schedule}
+
+
+@router.get("/pricing/zone-matrix")
+async def zone_price_matrix(is_weekend: bool = False, request: Request = None):
+    """Return current-hour ML price recommendation for every zone."""
+    from datetime import datetime
+    engine = request.app.state.engine
+    current_hour = datetime.now().hour
+    is_wknd = datetime.now().weekday() >= 5 or is_weekend
+    zones = ["Indiranagar", "Koramangala", "Whitefield", "Marathahalli",
+             "HSR Layout", "Jayanagar", "Electronic City", "Hebbal"]
+    matrix = []
+    for zone in zones:
+        rec = engine.get_price_recommendation(zone, current_hour, is_wknd)
+        surge = rec["surge_multiplier"]
+        demand = ("High" if surge >= 1.17 else ("Moderate" if surge >= 1.08 else "Normal"))
+        # Estimate zone revenue from zone intelligence
+        zi = engine.get_zone_intelligence()
+        zone_data = next((z for z in zi if z["zone"] == zone), {})
+        matrix.append({
+            "zone": zone,
+            "price": rec["recommended_price"],
+            "surge": surge,
+            "demand": demand,
+            "demand_index": rec["demand_index"],
+            "revenue": zone_data.get("revenue", 0),
+            "rides": zone_data.get("rides", 0),
+        })
+    return {"success": True, "data": matrix}
+
+
 @router.get("/fleet")
 async def get_fleet(request: Request):
     """Simulated fleet status data with dynamic ML demand scoring."""

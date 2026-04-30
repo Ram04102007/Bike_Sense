@@ -189,6 +189,41 @@ export const getMonthlyReport     = () => apiFetch<any[]>(`${ML_API}/admin/repor
 export const getPricingRec        = (area: string, hour: number, is_weekend = false) =>
   apiFetch<any>(`${ML_API}/admin/pricing/recommend?area=${encodeURIComponent(area)}&hour=${hour}&is_weekend=${is_weekend}`, {}, null);
 
+// Fallback: formula-based hourly schedule
+const mockHourlySchedule = (area = "Indiranagar") => {
+  const areaBoost: Record<string,number> = {
+    Indiranagar:1.3, Koramangala:1.2, Whitefield:1.1, Marathahalli:1.0,
+    "HSR Layout":1.15, Jayanagar:0.9, "Electronic City":0.95, Hebbal:0.85,
+  };
+  const ab = areaBoost[area] ?? 1.0;
+  return Array.from({ length: 24 }, (_, h) => {
+    const isRush = (h >= 7 && h <= 9) || (h >= 17 && h <= 20);
+    const isMid  = h >= 10 && h <= 15;
+    const surge  = isRush ? 1.25 : isMid ? 1.0 : ab >= 1.2 ? 1.08 : 1.0;
+    return { hour: h, hour_label: `${h.toString().padStart(2,"0")}:00`,
+      price: parseFloat((65 * surge).toFixed(2)), surge,
+      demand_index: parseFloat((ab * (isRush ? 1.4 : isMid ? 1.0 : 0.7)).toFixed(2)),
+      strategy: surge > 1.0 ? "Surge pricing active" : "Standard pricing",
+    };
+  });
+};
+
+const mockZoneMatrix = [
+  { zone:"Indiranagar",   price:76.05, surge:1.17, demand:"High",     demand_index:1.30, revenue:235980, rides:3120 },
+  { zone:"Koramangala",   price:70.20, surge:1.08, demand:"Moderate", demand_index:1.20, revenue:215280, rides:2890 },
+  { zone:"Whitefield",    price:70.20, surge:1.08, demand:"Moderate", demand_index:1.10, revenue:191790, rides:2640 },
+  { zone:"HSR Layout",    price:70.20, surge:1.08, demand:"Moderate", demand_index:1.15, revenue:199410, rides:2700 },
+  { zone:"Marathahalli",  price:65.00, surge:1.00, demand:"Normal",   demand_index:1.00, revenue:161460, rides:2480 },
+  { zone:"Electronic City",price:65.00,surge:1.00, demand:"Normal",   demand_index:0.95, revenue:152490, rides:2350 },
+  { zone:"Jayanagar",     price:65.00, surge:1.00, demand:"Normal",   demand_index:0.90, revenue:136620, rides:2100 },
+  { zone:"Hebbal",        price:65.00, surge:1.00, demand:"Normal",   demand_index:0.85, revenue:115230, rides:1780 },
+];
+
+export const getHourlyPriceSchedule = (area = "Indiranagar", is_weekend = false) =>
+  apiFetch<any[]>(`${ML_API}/admin/pricing/hourly-schedule?area=${encodeURIComponent(area)}&is_weekend=${is_weekend}`, {}, mockHourlySchedule(area));
+
+export const getZonePriceMatrix = (is_weekend = false) =>
+  apiFetch<any[]>(`${ML_API}/admin/pricing/zone-matrix?is_weekend=${is_weekend}`, {}, mockZoneMatrix);
 
 // ─── Consumer APIs ────────────────────────────────────────────────────────────
 export const getBikes = (area?: string, type?: string) =>
