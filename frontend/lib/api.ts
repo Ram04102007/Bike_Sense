@@ -148,8 +148,12 @@ export const getEventPricing = () => apiFetch<any[]>(`${ML_API}/admin/pricing/ev
 export const getHourlyPriceSchedule = (area = "Indiranagar", is_weekend = false) =>
   apiFetch<any[]>(`${ML_API}/admin/pricing/hourly-schedule?area=${encodeURIComponent(area)}&is_weekend=${is_weekend}`);
 
-export const getZonePriceMatrix = (is_weekend = false) =>
-  apiFetch<any[]>(`${ML_API}/admin/pricing/zone-matrix?is_weekend=${is_weekend}`);
+export const getZonePriceMatrix = (is_weekend = false, date?: string, hour?: number) => {
+  let url = `${ML_API}/admin/pricing/zone-matrix?is_weekend=${is_weekend}`;
+  if (date) url += `&date=${encodeURIComponent(date)}`;
+  if (hour !== undefined) url += `&hour=${hour}`;
+  return apiFetch<any[]>(url);
+};
 
 // ─── Consumer APIs ────────────────────────────────────────────────────────────
 export const getBikes = (area?: string, type?: string) =>

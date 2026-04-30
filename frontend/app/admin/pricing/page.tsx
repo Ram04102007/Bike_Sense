@@ -76,6 +76,8 @@ export default function PricingPage() {
   const [zoneData, setZoneData]         = useState<any[]>([]);
   const [zoneLoading, setZoneLoading]   = useState(true);
   const [zoneLive, setZoneLive]         = useState(false);
+  const [zoneDay, setZoneDay]           = useState<string>("Today");
+  const [zoneHour, setZoneHour]         = useState<string>("Current");
 
   // Events Data
   const [eventsData, setEventsData]     = useState<any[]>([]);
@@ -122,12 +124,33 @@ export default function PricingPage() {
   const fetchZones = useCallback(async () => {
     setZoneLoading(true);
     try {
-      const data = await getZonePriceMatrix(isWeekend);
+      let targetDate = undefined;
+      let targetIsWeekend = isWeekend;
+      if (zoneDay !== "Today") {
+        const days = ["Sunday","Monday","Tuesday","Wednesday","Thursday","Friday","Saturday"];
+        const targetIdx = days.indexOf(zoneDay);
+        const today = new Date();
+        const todayIdx = today.getDay();
+        let daysAhead = targetIdx - todayIdx;
+        if (daysAhead <= 0) daysAhead += 7; // Get the next occurrence
+        const d = new Date(today.getTime() + daysAhead * 24 * 60 * 60 * 1000);
+        targetDate = d.toISOString().split("T")[0];
+        targetIsWeekend = (targetIdx === 0 || targetIdx === 6);
+      } else {
+        targetDate = selectedDate; // use the globally selected date if it's "Today"
+      }
+      
+      let targetHour = undefined;
+      if (zoneHour !== "Current") {
+        targetHour = parseInt(zoneHour, 10);
+      }
+
+      const data = await getZonePriceMatrix(targetIsWeekend, targetDate, targetHour);
       setZoneData(data);
       setZoneLive(new Set(data.map((d: any) => d.price)).size > 2);
     } catch { setZoneData([]); }
     finally  { setZoneLoading(false); }
-  }, [isWeekend]);
+  }, [isWeekend, zoneDay, zoneHour, selectedDate]);
 
   useEffect(() => { fetchZones(); }, [fetchZones]);
 
@@ -396,21 +419,42 @@ export default function PricingPage() {
 
       {/* ── Zone Matrix ── */}
       <div className="glass rounded-xl p-6">
-        <div className="flex items-center justify-between mb-4">
+        <div className="flex flex-col md:flex-row md:items-center justify-between mb-4 gap-4">
           <div>
             <h3 className="font-display font-semibold text-white">Live Zone Pricing Matrix</h3>
             <p className="text-xs text-slate-500 mt-0.5">
-              Real-time SARIMA recommendation for all 8 zones at current hour
+              Real-time SARIMA recommendation for all 8 zones
             </p>
           </div>
-          <span className={`flex items-center gap-1.5 text-xs px-2 py-1 rounded-lg ${
-            zoneLive
-              ? "bg-emerald-500/10 text-emerald-300 border border-emerald-500/20"
-              : "bg-blue-500/10 text-blue-300 border border-blue-500/20"
-          }`}>
-            <span className={`w-1.5 h-1.5 rounded-full animate-pulse ${zoneLive ? "bg-emerald-400" : "bg-blue-400"}`} />
-            {zoneLive ? "ML Live" : "Demo"}
-          </span>
+          <div className="flex items-center gap-4">
+            <select
+              value={zoneDay}
+              onChange={(e) => setZoneDay(e.target.value)}
+              className="bg-white/5 border border-white/10 rounded-lg px-3 py-1.5 text-sm text-white focus:outline-none focus:border-brand-500"
+            >
+              {["Today", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"].map(d => (
+                <option key={d} value={d} className="bg-slate-900">{d}</option>
+              ))}
+            </select>
+            <select
+              value={zoneHour}
+              onChange={(e) => setZoneHour(e.target.value)}
+              className="bg-white/5 border border-white/10 rounded-lg px-3 py-1.5 text-sm text-white focus:outline-none focus:border-brand-500"
+            >
+              <option value="Current" className="bg-slate-900">Current Time</option>
+              {Array.from({ length: 24 }).map((_, i) => (
+                <option key={i} value={i} className="bg-slate-900">{i.toString().padStart(2, "0")}:00</option>
+              ))}
+            </select>
+            <span className={`flex items-center gap-1.5 text-xs px-2 py-1 rounded-lg ${
+              zoneLive
+                ? "bg-emerald-500/10 text-emerald-300 border border-emerald-500/20"
+                : "bg-blue-500/10 text-blue-300 border border-blue-500/20"
+            }`}>
+              <span className={`w-1.5 h-1.5 rounded-full animate-pulse ${zoneLive ? "bg-emerald-400" : "bg-blue-400"}`} />
+              {zoneLive ? "ML Live" : "Demo"}
+            </span>
+          </div>
         </div>
 
         {zoneLoading ? (

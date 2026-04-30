@@ -42,17 +42,17 @@ async def hourly_price_schedule(area: str = "Indiranagar", is_weekend: bool = Fa
 
 
 @router.get("/pricing/zone-matrix")
-async def zone_price_matrix(is_weekend: bool = False, request: Request = None):
-    """Return current-hour ML price recommendation for every zone."""
+async def zone_price_matrix(is_weekend: bool = False, date: str = None, hour: int = None, request: Request = None):
+    """Return ML price recommendation for every zone. If date/hour is provided, forecasts for that date/time."""
     from datetime import datetime
     engine = request.app.state.engine
-    current_hour = datetime.now().hour
+    current_hour = hour if hour is not None else datetime.now().hour
     is_wknd = datetime.now().weekday() >= 5 or is_weekend
     zones = ["Indiranagar", "Koramangala", "Whitefield", "Marathahalli",
              "HSR Layout", "Jayanagar", "Electronic City", "Hebbal"]
     matrix = []
     for zone in zones:
-        rec = engine.get_price_recommendation(zone, current_hour, is_wknd)
+        rec = engine.get_price_recommendation(zone, current_hour, is_wknd, date)
         surge = rec["surge_multiplier"]
         demand = ("High" if surge >= 1.17 else ("Moderate" if surge >= 1.08 else "Normal"))
         # Estimate zone revenue from zone intelligence
