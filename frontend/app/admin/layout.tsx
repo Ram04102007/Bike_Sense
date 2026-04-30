@@ -121,10 +121,6 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
           <div className="flex-1"></div>
 
           <div className="ml-auto flex items-center gap-3">
-            <button className="relative p-2 text-slate-400 hover:text-white transition-colors">
-              <Bell className="w-4 h-4" />
-              <span className="absolute top-1 right-1 w-2 h-2 bg-brand-500 rounded-full" />
-            </button>
             <SafeUserButton />
           </div>
         </header>
