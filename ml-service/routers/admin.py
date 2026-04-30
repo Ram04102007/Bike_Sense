@@ -268,3 +268,10 @@ async def monthly_report(request: Request):
 async def get_zone_intelligence(request: Request):
     engine = request.app.state.engine
     return {"success": True, "data": engine.get_zone_intelligence()}
+
+@router.get("/pricing/events")
+async def event_pricing_list(request: Request = None):
+    """Return dynamic festival and event pricing extracted from historical SARIMA ML data."""
+    engine = request.app.state.engine
+    events = engine.get_event_pricing()
+    return {"success": True, "data": events}

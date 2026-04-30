@@ -76,12 +76,29 @@ class ModelEngine:
         np.random.seed(42)
         weather_conditions = ["Clear","Cloudy","Light Rain","Heavy Rain","Foggy"]
         dates = pd.date_range("2024-04-25","2026-04-25",freq="h")[:17521]
+        
+        # Define hardcoded events mapped to MM-DD
+        events_map = {
+            "10-22": ("Diwali", 2.3), "10-23": ("Diwali", 2.3), "10-24": ("Diwali", 2.3),
+            "12-31": ("New Year", 1.85),
+            "05-19": ("Bangalore Marathon", 1.6),
+            "04-15": ("IPL Match Days", 1.45), "04-22": ("IPL Match Days", 1.45), "05-02": ("IPL Match Days", 1.45),
+            "01-26": ("Republic Day", 1.3),
+        }
+        
         records = []
         for dt in dates:
             hr = dt.hour
             hour_factor = 1 + 0.8*np.exp(-0.5*((hr-8)/2)**2) + 0.6*np.exp(-0.5*((hr-18)/2)**2)
             seasonal    = 1 + 0.15*np.sin(2*np.pi*(dt.month-3)/12)
             is_weekend  = 1 if dt.weekday()>=5 else 0
+            
+            mm_dd = dt.strftime("%m-%d")
+            event_name = "None"
+            event_mult = 1.0
+            if mm_dd in events_map:
+                event_name, event_mult = events_map[mm_dd]
+            
             weather     = np.random.choice(weather_conditions,p=[0.45,0.25,0.15,0.08,0.07])
             wf = {"Clear":1.0,"Cloudy":0.95,"Light Rain":0.7,"Heavy Rain":0.4,"Foggy":0.85}[weather]
             total = 0
@@ -91,15 +108,16 @@ class ModelEngine:
                 for m in BIKE_MODELS:
                     mw = {"Ather 450X":1.2,"Bounce Infinity":1.1,"Yulu Move":0.9,
                           "Rapido Bike":1.0,"Royal Enfield":0.85,"Honda Activa":1.05}[m]
-                    b = 12*hour_factor*aw*mw*seasonal*(1.1 if is_weekend else 1.0)*wf
+                    b = 12*hour_factor*aw*mw*seasonal*(1.1 if is_weekend else 1.0)*wf*event_mult
                     total += max(1,int(np.random.poisson(max(0.5,b))))
             temp = round(22+8*np.sin(2*np.pi*(dt.month-1)/12)+np.random.randn()*2,1)
             records.append({"dteday":dt.date(),"hr":hr,"datetime":dt,"cnt":total,
                            "temp":temp,"hum":round(60+20*np.sin(2*np.pi*(dt.month-5)/12)+np.random.randn()*5,1),
                            "windspeed":round(abs(np.random.randn()*8),1),
                            "traffic_factor":round(0.6+0.4*min(hour_factor/3,1)+np.random.uniform(-0.05,0.05),2),
-                           "weather_condition":weather,"holiday_flag":1 if np.random.random()<0.03 else 0,
+                           "weather_condition":weather,"holiday_flag":1 if event_name != "None" else (1 if np.random.random()<0.03 else 0),
                            "weekend_flag":is_weekend,"area_name":"Bangalore","bike_model":"All",
+                           "event_name":event_name,
                            "base_price":65.0,"surge_multiplier":1.0,"final_price":65.0,"zone":"City"})
         df = pd.DataFrame(records)
         p33=df.cnt.quantile(0.33); p66=df.cnt.quantile(0.66); p90=df.cnt.quantile(0.90)
@@ -330,6 +348,50 @@ class ModelEngine:
                 "tag": "Forecast"
             }
         ]
+    def get_event_pricing(self):
+        """Analyze the dataset for explicitly tagged events to extract their dynamic surge and volume impact."""
+        if "event_name" not in self.df.columns:
+            return []
+
+        events_df = self.df[self.df["event_name"] != "None"]
+        if events_df.empty:
+            return []
+
+        # We aggregate by event_name, then by day to calculate daily rides
+        # Then calculate average multiplier, expected rides per day, etc.
+        daily_events = events_df.groupby(["event_name", "dteday"]).agg(
+            daily_cnt=("cnt", "sum"),
+            avg_surge=("surge_multiplier", "mean")
+        ).reset_index()
+
+        # Now group by event_name to average the daily counts
+        summary = daily_events.groupby("event_name").agg(
+            expected_rides=("daily_cnt", "mean"),
+            multiplier=("avg_surge", "mean")
+        ).reset_index()
+
+        res = []
+        for _, row in summary.iterrows():
+            mult = row["multiplier"]
+            impact = "High" if mult >= 1.7 else ("Moderate" if mult >= 1.4 else "Low")
+            rides = int(row["expected_rides"])
+            rides_fmt = f"{rides:,}" if "Diwali" not in row["event_name"] else f"{rides:,}/day"
+            
+            # Map events back to standard labels
+            evt_label = row["event_name"]
+            if evt_label == "Diwali": evt_label = "Diwali (Oct 20–24)"
+            if evt_label == "New Year": evt_label = "New Year (Dec 31)"
+
+            res.append({
+                "event": evt_label,
+                "multiplier": round(mult, 2),
+                "expected_rides": rides_fmt,
+                "impact": impact
+            })
+        
+        # Sort by multiplier descending
+        res.sort(key=lambda x: x["multiplier"], reverse=True)
+        return res
 
     def get_heatmap_data(self, target_date: str = None):
         """Return hour × location demand matrix. If target_date is given, predicts for that date."""

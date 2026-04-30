@@ -9,19 +9,11 @@ import {
   DollarSign, Zap, TrendingUp, RefreshCw,
   WifiOff, MapPin, Clock, Activity, Info,
 } from "lucide-react";
-import { getPricingRec, getHourlyPriceSchedule, getZonePriceMatrix } from "@/lib/api";
+import { getPricingRec, getHourlyPriceSchedule, getZonePriceMatrix, getEventPricing } from "@/lib/api";
 
 const AREAS = [
   "Indiranagar","Koramangala","Whitefield","Marathahalli",
   "HSR Layout","Jayanagar","Electronic City","Hebbal",
-];
-
-const FESTIVAL_EVENTS = [
-  { event:"Diwali (Oct 20–24)",    multiplier:2.30, expected_rides:"4,200/day", impact:"High" },
-  { event:"New Year (Dec 31)",     multiplier:1.85, expected_rides:"3,800",     impact:"High" },
-  { event:"Bangalore Marathon",    multiplier:1.60, expected_rides:"2,100",     impact:"Moderate" },
-  { event:"IPL Match Days",        multiplier:1.45, expected_rides:"1,800",     impact:"Moderate" },
-  { event:"Republic Day",          multiplier:1.30, expected_rides:"1,500",     impact:"Low" },
 ];
 
 function surgeColor(surge: number) {
@@ -85,6 +77,10 @@ export default function PricingPage() {
   const [zoneLoading, setZoneLoading]   = useState(true);
   const [zoneLive, setZoneLive]         = useState(false);
 
+  // Events Data
+  const [eventsData, setEventsData]     = useState<any[]>([]);
+  const [eventsLoading, setEventsLoading] = useState(true);
+
   // ── ML Calculator ─────────────────────────────────────────────────────────
   const fetchRecommendation = useCallback(async () => {
     setRecLoading(true);
@@ -135,7 +131,18 @@ export default function PricingPage() {
 
   useEffect(() => { fetchZones(); }, [fetchZones]);
 
-  const refreshAll = () => { fetchRecommendation(); fetchHourly(); fetchZones(); };
+  const fetchEvents = useCallback(async () => {
+    setEventsLoading(true);
+    try {
+      const data = await getEventPricing();
+      setEventsData(data);
+    } catch { setEventsData([]); }
+    finally { setEventsLoading(false); }
+  }, []);
+
+  useEffect(() => { fetchEvents(); }, [fetchEvents]);
+
+  const refreshAll = () => { fetchRecommendation(); fetchHourly(); fetchZones(); fetchEvents(); };
 
   // ML-provided values (no user override)
   const mlBasePrice  = mlRec?.base_price ?? 65;
@@ -466,7 +473,9 @@ export default function PricingPage() {
               </tr>
             </thead>
             <tbody>
-              {FESTIVAL_EVENTS.map((f, i) => {
+              {eventsLoading ? (
+                <tr><td colSpan={5} className="p-4"><Skeleton className="h-20" /></td></tr>
+              ) : eventsData.map((f, i) => {
                 const festPrice = parseFloat((mlBasePrice * f.multiplier).toFixed(2));
                 return (
                   <motion.tr key={f.event}

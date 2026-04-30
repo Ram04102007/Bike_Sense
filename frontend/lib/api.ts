@@ -143,6 +143,8 @@ export const getPricingRec = (area: string, hour: number, is_weekend = false, da
   return apiFetch<any>(url);
 };
 
+export const getEventPricing = () => apiFetch<any[]>(`${ML_API}/admin/pricing/events`);
+
 export const getHourlyPriceSchedule = (area = "Indiranagar", is_weekend = false) =>
   apiFetch<any[]>(`${ML_API}/admin/pricing/hourly-schedule?area=${encodeURIComponent(area)}&is_weekend=${is_weekend}`);
 
