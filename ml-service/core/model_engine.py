@@ -79,7 +79,8 @@ class ModelEngine:
         logger.info("Generating synthetic Bangalore bike demand dataset...")
         np.random.seed(42)
         weather_conditions = ["Clear","Cloudy","Light Rain","Heavy Rain","Foggy"]
-        dates = pd.date_range("2024-05-01","2026-04-30 23:00:00",freq="h")
+        end_date = pd.Timestamp.now().strftime("%Y-%m-%d %H:%M:%S")
+        dates = pd.date_range("2024-05-01", end_date, freq="h")
         
         # Define hardcoded events mapped to MM-DD
         events_map = {
