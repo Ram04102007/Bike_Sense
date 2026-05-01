@@ -2,7 +2,6 @@
 import { useState, useEffect } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { apiClient } from "@/lib/api";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   LayoutDashboard, TrendingUp, DollarSign, Bike, Map, Users,
@@ -42,7 +41,8 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
   useEffect(() => {
     const fetchStatus = async () => {
       try {
-        const res = await apiClient.get("/admin/system-status");
+        const req = await fetch("/api/ml/admin/system-status");
+        const res = await req.json();
         if (res.success && res.last_trained) {
           const trainedTime = new Date(res.last_trained).getTime();
           const now = Date.now();
