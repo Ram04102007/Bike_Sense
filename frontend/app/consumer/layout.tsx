@@ -102,10 +102,6 @@ export default function ConsumerLayout({ children }: { children: React.ReactNode
           </button>
           <div className="flex-1"></div>
           <div className="ml-auto flex items-center gap-3">
-            <button className="relative p-2 text-slate-400 hover:text-white">
-              <Bell className="w-4 h-4" />
-              <span className="absolute top-1 right-1 w-2 h-2 bg-emerald-500 rounded-full" />
-            </button>
             <SafeUserButton />
             <Link href="/" className="p-2 text-slate-400 hover:text-white hover:bg-white/5 rounded-full transition-all flex items-center gap-2 text-sm">
               <LogOut className="w-4 h-4" />
