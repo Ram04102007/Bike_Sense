@@ -182,6 +182,39 @@ export default function ConsumerHome() {
   const [loadingCharts, setLoadingCharts] = useState(true);
   const [isLive,        setIsLive]        = useState(false);
 
+  // Auto-detect closest zone based on user's location
+  useEffect(() => {
+    if ("geolocation" in navigator) {
+      navigator.geolocation.getCurrentPosition(
+        (pos) => {
+          const { latitude, longitude } = pos.coords;
+          const zoneCoords: Record<string, [number, number]> = {
+            "Indiranagar": [12.9784, 77.6408],
+            "Koramangala": [12.9279, 77.6271],
+            "Whitefield": [12.9698, 77.7499],
+            "Marathahalli": [12.9569, 77.7011],
+            "HSR Layout": [12.9121, 77.6446],
+            "Jayanagar": [12.9299, 77.5826],
+            "Electronic City": [12.8399, 77.6770],
+            "Hebbal": [13.0354, 77.5988]
+          };
+          
+          let minDist = Infinity;
+          let closestZone = "Indiranagar";
+          for (const [area, [lat, lon]] of Object.entries(zoneCoords)) {
+            const dist = Math.hypot(latitude - lat, longitude - lon);
+            if (dist < minDist) {
+              minDist = dist;
+              closestZone = area;
+            }
+          }
+          setSelectedArea(closestZone);
+        },
+        (err) => console.log("Geolocation permission denied/failed", err)
+      );
+    }
+  }, []);
+
   // Derived values from live data
   const stdPrice  = hourlyData.length ? Math.min(...hourlyData.map(h => h.price)) : 65;
   const peakPrice = hourlyData.length ? Math.max(...hourlyData.map(h => h.price)) : 81.25;
