@@ -305,7 +305,15 @@ export default function AdminDashboard() {
 
       {/* Zone Intelligence Table */}
       <div className="glass rounded-xl p-6">
-        <h3 className="font-display font-semibold text-white mb-4">Zone Intelligence Matrix</h3>
+        <div className="mb-4">
+          <h3 className="font-display font-semibold text-white flex items-center gap-2">
+            Zone Intelligence Matrix
+            <span className="bg-blue-500/10 text-blue-400 border border-blue-500/20 text-[10px] uppercase font-mono px-1.5 py-0.5 rounded">Estimated</span>
+          </h3>
+          <p className="text-xs text-slate-500 mt-1">
+            Approximated by applying historical zone density weights and live SARIMA surge to recent 30-day city totals.
+          </p>
+        </div>
         {loading
           ? <Skeleton className="h-48" />
           : (
