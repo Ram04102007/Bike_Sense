@@ -1,6 +1,7 @@
 """Admin endpoints — revenue, heatmap, fleet, pricing."""
 from fastapi import APIRouter, Request
 from typing import Optional
+from pydantic import BaseModel
 
 router = APIRouter()
 
@@ -12,6 +13,25 @@ async def get_system_status(request: Request):
         # Return ISO string for easy parsing
         return {"success": True, "last_trained": last_trained.isoformat()}
     return {"success": False}
+
+
+class MLConfigUpdate(BaseModel):
+    peak_surge: float
+    event_multiplier: float
+
+@router.get("/ml-config")
+async def get_ml_config(request: Request):
+    engine = request.app.state.engine
+    return {"success": True, "config": getattr(engine, "surge_config", {"peak_surge": 1.25, "event_multiplier": 1.50})}
+
+@router.post("/ml-config")
+async def update_ml_config(config: MLConfigUpdate, request: Request):
+    engine = request.app.state.engine
+    engine.surge_config = {
+        "peak_surge": config.peak_surge,
+        "event_multiplier": config.event_multiplier
+    }
+    return {"success": True, "message": "ML Configuration updated successfully."}
 
 
 @router.get("/revenue")

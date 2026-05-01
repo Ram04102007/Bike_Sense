@@ -48,6 +48,10 @@ class ModelEngine:
         self.area_weight_norm    = None
         self.model_weight_norm   = None
         self.loc_model_hr_stats  = None
+        self.surge_config = {
+            "peak_surge": 1.25,
+            "event_multiplier": 1.50
+        }
         self._fc_short = self._fc_med = self._fc_long = None
 
     # ─── Data Preparation ────────────────────────────────────────────────────
@@ -187,15 +191,29 @@ class ModelEngine:
         self._fc_long["ci"].index   = self._fc_long["idx"]
 
     # ─── Surge Logic ─────────────────────────────────────────────────────────
-    def compute_surge(self, demand):
+    def compute_surge(self, demand, date_str=None):
         d = float(demand)
         p33 = self.hourly_ts["cnt"].quantile(0.33)
         p66 = self.hourly_ts["cnt"].quantile(0.66)
         p90 = self.hourly_ts["cnt"].quantile(0.90)
-        if d < p33: return 1.00
-        if d < p66: return 1.08
-        if d < p90: return 1.17
-        return 1.25
+        
+        peak = float(self.surge_config.get("peak_surge", 1.25))
+        
+        # Calculate base surge dynamically scaling up to peak
+        if d < p33: base_surge = 1.00
+        elif d < p66: base_surge = 1.00 + (peak - 1.00) * 0.3
+        elif d < p90: base_surge = 1.00 + (peak - 1.00) * 0.7
+        else: base_surge = peak
+        
+        # Apply event multiplier if date falls on a known event
+        if date_str:
+            # Simplified event check
+            events_map = {"10-22": True, "10-23": True, "10-24": True, "12-31": True, "05-19": True, "04-15": True, "04-22": True, "05-02": True, "01-26": True}
+            mm_dd = "-".join(date_str.split("-")[1:]) if "-" in date_str else ""
+            if mm_dd in events_map:
+                base_surge *= float(self.surge_config.get("event_multiplier", 1.50))
+                
+        return round(base_surge, 2)
 
     # ─── Public Training Entry ────────────────────────────────────────────────
     def train(self):
@@ -238,7 +256,7 @@ class ModelEngine:
             base_agg = max(0, (d_dem / 24.0) * norm)
             ci = (max(0, base_agg*0.80), base_agg*1.20)
 
-        surge  = self.compute_surge(base_agg)
+        surge  = self.compute_surge(base_agg, date)
         price  = round(BASE_PRICE * surge, 2)
         labels = {1.00:"Standard",1.08:"Moderate",1.17:"High",1.25:"Peak Surge"}
 
@@ -485,7 +503,7 @@ class ModelEngine:
             sarima_mean = float(self.hourly_ts["cnt"].mean())
             base_dem    = sarima_mean * demand_idx
 
-        surge = self.compute_surge(base_dem)
+        surge = self.compute_surge(base_dem, date)
         price = round(BASE_PRICE * surge, 2)
 
         # Demand percentile among all hourly observations

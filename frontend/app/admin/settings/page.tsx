@@ -1,9 +1,28 @@
 "use client";
+import { useState, useEffect } from "react";
 import { motion } from "framer-motion";
-import { LogOut, User, Zap, Bell, Shield, Moon, Monitor, Database } from "lucide-react";
+import { LogOut, User, Database, Moon, Monitor, Shield } from "lucide-react";
 import toast from "react-hot-toast";
 
 export default function SettingsPage() {
+  const [peakSurge, setPeakSurge] = useState(1.25);
+  const [eventMultiplier, setEventMultiplier] = useState(1.50);
+
+  useEffect(() => {
+    const loadConfig = async () => {
+      try {
+        const res = await fetch("/api/ml/admin/ml-config");
+        const json = await res.json();
+        if (json.success && json.config) {
+          setPeakSurge(json.config.peak_surge);
+          setEventMultiplier(json.config.event_multiplier);
+        }
+      } catch (err) {
+        console.error("Failed to load ML config", err);
+      }
+    };
+    loadConfig();
+  }, []);
   const handleSignOut = async () => {
     try {
       // If Clerk is available on the window object, use its signOut method
@@ -17,8 +36,25 @@ export default function SettingsPage() {
     window.location.href = "/";
   };
 
-  const saveSettings = () => {
-    toast.success("Settings saved successfully");
+  const saveSettings = async () => {
+    try {
+      const res = await fetch("/api/ml/admin/ml-config", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          peak_surge: Number(peakSurge),
+          event_multiplier: Number(eventMultiplier)
+        })
+      });
+      const json = await res.json();
+      if (json.success) {
+        toast.success("ML Engine updated dynamically!");
+      } else {
+        toast.error("Failed to update ML settings.");
+      }
+    } catch (err) {
+      toast.error("API error while saving settings.");
+    }
   };
 
   return (
@@ -79,36 +115,40 @@ export default function SettingsPage() {
             </h2>
             
             <div className="space-y-4">
-              <div className="flex items-center justify-between p-4 bg-white/5 rounded-lg border border-white/5">
-                <div>
-                  <h4 className="text-white font-medium text-sm">Aggressive Surge Pricing</h4>
-                  <p className="text-xs text-slate-400 mt-1">Increase the surge multiplier ceiling from 1.25x to 1.5x during peak demand.</p>
-                </div>
-                <div className="w-11 h-6 bg-brand-500 rounded-full relative cursor-pointer opacity-50">
-                  <div className="absolute right-1 top-1 bg-white w-4 h-4 rounded-full"></div>
-                </div>
-              </div>
-
-              <div className="flex items-center justify-between p-4 bg-white/5 rounded-lg border border-white/5">
-                <div>
-                  <h4 className="text-white font-medium text-sm">Auto-Rebalancing Automation</h4>
-                  <p className="text-xs text-slate-400 mt-1">Allow the ML engine to automatically dispatch fleet trucks before low availability occurs.</p>
-                </div>
-                <div className="w-11 h-6 bg-brand-500 rounded-full relative cursor-pointer opacity-50">
-                  <div className="absolute right-1 top-1 bg-white w-4 h-4 rounded-full"></div>
+              <div className="p-4 bg-white/5 rounded-lg border border-white/5">
+                <div className="flex justify-between items-start mb-3">
+                  <div>
+                    <h4 className="text-white font-medium text-sm">Peak Demand Surge Ceiling</h4>
+                    <p className="text-xs text-slate-400 mt-1">Maximum surge multiplier allowed during rush hours.</p>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <input 
+                      type="number" step="0.05" min="1.0" max="3.0"
+                      value={peakSurge}
+                      onChange={e => setPeakSurge(Number(e.target.value))}
+                      className="w-20 bg-dark-800 border border-white/10 text-white text-sm rounded-lg px-3 py-1.5 outline-none focus:border-brand-500 text-right"
+                    />
+                    <span className="text-slate-400 text-sm font-medium">x</span>
+                  </div>
                 </div>
               </div>
 
-              <div className="flex items-center justify-between p-4 bg-white/5 rounded-lg border border-white/5">
-                <div>
-                  <h4 className="text-white font-medium text-sm">Model Retraining Interval</h4>
-                  <p className="text-xs text-slate-400 mt-1">How often the SARIMA model updates its coefficients.</p>
+              <div className="p-4 bg-white/5 rounded-lg border border-white/5">
+                <div className="flex justify-between items-start mb-3">
+                  <div>
+                    <h4 className="text-white font-medium text-sm">Event / Festival Multiplier</h4>
+                    <p className="text-xs text-slate-400 mt-1">Global multiplier applied to base surge during known events (e.g. Diwali).</p>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <input 
+                      type="number" step="0.05" min="1.0" max="5.0"
+                      value={eventMultiplier}
+                      onChange={e => setEventMultiplier(Number(e.target.value))}
+                      className="w-20 bg-dark-800 border border-white/10 text-white text-sm rounded-lg px-3 py-1.5 outline-none focus:border-brand-500 text-right"
+                    />
+                    <span className="text-slate-400 text-sm font-medium">x</span>
+                  </div>
                 </div>
-                <select className="bg-dark-800 border border-white/10 text-white text-sm rounded-lg px-3 py-1.5 outline-none focus:border-brand-500">
-                  <option>Every 1 Hour</option>
-                  <option>Every 6 Hours</option>
-                  <option>Daily at Midnight</option>
-                </select>
               </div>
             </div>
 
