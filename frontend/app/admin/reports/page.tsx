@@ -122,11 +122,16 @@ export default function ReportsPage() {
 
   useEffect(() => { loadData(); }, []);
 
-  // ── Derived KPIs ──
-  // Show totals for the current dataset. 
-  const totalRevenue  = monthlyData.reduce((a, r) => a + r.revenue, 0).toFixed(1);
-  const totalRides    = monthlyData.reduce((a, r) => a + r.rides, 0);
-  const lastGrowth       = monthlyData.at(-1)?.growth ?? null;
+  // ── Derived KPIs — split actual vs forecast ──
+  const historical     = monthlyData.filter(r => !r.isForecast);
+  const forecast       = monthlyData.filter(r => r.isForecast);
+  const historicalRevenue = historical.reduce((a, r) => a + r.revenue, 0);
+  const forecastRevenue   = forecast.reduce((a, r) => a + r.revenue, 0);
+  const totalRevenue      = (historicalRevenue + forecastRevenue).toFixed(1);
+  const totalRides        = monthlyData.reduce((a, r) => a + r.rides, 0);
+  const totalHistRides    = historical.reduce((a, r) => a + r.rides, 0);
+  const totalFcRides      = forecast.reduce((a, r) => a + r.rides, 0);
+  const lastGrowth        = monthlyData.at(-1)?.growth ?? null;
   const avgRevenuePerRide =
     totalRides > 0
       ? ((parseFloat(totalRevenue) * 100000) / totalRides).toFixed(0)
@@ -135,6 +140,11 @@ export default function ReportsPage() {
     (best, r) => (r.revenue > (best?.revenue ?? 0) ? r : best),
     monthlyData[0]
   );
+  // Revenue progress %  actual / (actual + forecast)
+  const revenueProgress =
+    parseFloat(totalRevenue) > 0
+      ? Math.round((historicalRevenue / parseFloat(totalRevenue)) * 100)
+      : 0;
 
   // ── Export handlers ──
   const handleExport = async (type: string) => {
@@ -198,59 +208,116 @@ export default function ReportsPage() {
       ) : (
         <>
           {/* KPI Summary Cards */}
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-            {[
-              {
-                label: "Total Revenue (inc. Forecast)",
-                value: `₹${totalRevenue}L`,
-                sub: lastGrowth !== null
-                  ? `${lastGrowth >= 0 ? "↑" : "↓"} ${Math.abs(lastGrowth)}% vs prior month`
-                  : "—",
-                subColor: lastGrowth !== null && lastGrowth >= 0 ? "text-emerald-400" : "text-red-400",
-                icon: DollarSign, color: "#00f5ff",
-              },
-              {
-                label: "Total Rides",
-                value: totalRides.toLocaleString(),
-                sub: "Actual + Predicted trips",
-                subColor: "text-slate-500",
-                icon: Bike, color: "#6366f1",
-              },
-              {
-                label: "Avg Revenue / Ride",
-                value: `₹${avgRevenuePerRide}`,
-                sub: "Including surge pricing",
-                subColor: "text-slate-500",
-                icon: Activity, color: "#00ff88",
-              },
-              {
-                label: "Best Month",
-                value: bestMonth?.month ?? "—",
-                sub: bestMonth ? `₹${bestMonth.revenue}L revenue` : "",
-                subColor: "text-amber-400",
-                icon: TrendingUp, color: "#f59e0b",
-              },
-            ].map((k, i) => (
-              <motion.div
-                key={k.label}
-                initial={{ opacity: 0, y: 16 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ delay: i * 0.06 }}
-                className="glass rounded-xl p-5"
-              >
-                <div className="flex items-center gap-2 mb-3">
-                  <div
-                    className="w-8 h-8 rounded-lg flex items-center justify-center"
-                    style={{ background: `${k.color}18`, border: `1px solid ${k.color}28` }}
-                  >
-                    <k.icon className="w-4 h-4" style={{ color: k.color }} />
+          <div className="space-y-4">
+            {/* ── Revenue Split Widget (replaces single total) ── */}
+            <motion.div
+              initial={{ opacity: 0, y: 16 }}
+              animate={{ opacity: 1, y: 0 }}
+              className="glass rounded-xl p-5"
+            >
+              <div className="flex items-center justify-between mb-4">
+                <div className="flex items-center gap-2">
+                  <div className="w-8 h-8 rounded-lg flex items-center justify-center" style={{ background: "#00f5ff18", border: "1px solid #00f5ff28" }}>
+                    <DollarSign className="w-4 h-4 text-cyan-400" />
                   </div>
-                  <span className="text-xs text-slate-500">{k.label}</span>
+                  <div>
+                    <div className="text-xs text-slate-500">Revenue Breakdown</div>
+                    <div className="text-white font-semibold text-sm">Actual + ML Forecast</div>
+                  </div>
                 </div>
-                <div className="text-2xl font-display font-bold text-white">{k.value}</div>
-                <div className={`text-xs mt-1 ${k.subColor}`}>{k.sub}</div>
-              </motion.div>
-            ))}
+                <div className="text-right">
+                  <div className="text-2xl font-display font-bold text-white">₹{totalRevenue}L</div>
+                  <div className={`text-xs mt-0.5 ${lastGrowth !== null && lastGrowth >= 0 ? "text-emerald-400" : "text-red-400"}`}>
+                    {lastGrowth !== null ? `${lastGrowth >= 0 ? "↑" : "↓"} ${Math.abs(lastGrowth)}% MoM` : "—"}
+                  </div>
+                </div>
+              </div>
+
+              {/* Progress bar */}
+              <div className="mb-3">
+                <div className="flex justify-between text-xs mb-1.5">
+                  <span className="text-emerald-400 flex items-center gap-1">
+                    <span className="w-2 h-2 rounded-full bg-emerald-400 inline-block" />
+                    Actual Revenue
+                  </span>
+                  <span className="text-purple-400 flex items-center gap-1">
+                    ML Forecast (12m)
+                    <span className="w-2 h-2 rounded-full bg-purple-400 inline-block" />
+                  </span>
+                </div>
+                <div className="h-3 rounded-full bg-white/5 overflow-hidden">
+                  <div
+                    className="h-full rounded-full"
+                    style={{
+                      width: `${revenueProgress}%`,
+                      background: "linear-gradient(90deg, #10b981, #00f5ff)",
+                      transition: "width 0.8s ease",
+                    }}
+                  />
+                </div>
+              </div>
+
+              {/* Split figures */}
+              <div className="grid grid-cols-2 gap-4 mt-4">
+                <div className="glass-light rounded-lg p-3">
+                  <div className="text-xs text-slate-500 mb-1">Revenue Till Now</div>
+                  <div className="text-xl font-display font-bold text-emerald-400">₹{historicalRevenue.toFixed(1)}L</div>
+                  <div className="text-xs text-slate-500 mt-0.5">{totalHistRides.toLocaleString()} actual rides</div>
+                </div>
+                <div className="glass-light rounded-lg p-3">
+                  <div className="text-xs text-slate-500 mb-1">SARIMA 12m Forecast</div>
+                  <div className="text-xl font-display font-bold text-purple-400">₹{forecastRevenue.toFixed(1)}L</div>
+                  <div className="text-xs text-slate-500 mt-0.5">{totalFcRides.toLocaleString()} predicted rides</div>
+                </div>
+              </div>
+            </motion.div>
+
+            {/* ── Remaining 3 KPI cards ── */}
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              {[
+                {
+                  label: "Total Rides",
+                  value: totalRides.toLocaleString(),
+                  sub: "Actual + Predicted trips",
+                  subColor: "text-slate-500",
+                  icon: Bike, color: "#6366f1",
+                },
+                {
+                  label: "Avg Revenue / Ride",
+                  value: `₹${avgRevenuePerRide}`,
+                  sub: "Including surge pricing",
+                  subColor: "text-slate-500",
+                  icon: Activity, color: "#00ff88",
+                },
+                {
+                  label: "Best Month",
+                  value: bestMonth?.month ?? "—",
+                  sub: bestMonth ? `₹${bestMonth.revenue}L revenue` : "",
+                  subColor: "text-amber-400",
+                  icon: TrendingUp, color: "#f59e0b",
+                },
+              ].map((k, i) => (
+                <motion.div
+                  key={k.label}
+                  initial={{ opacity: 0, y: 16 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ delay: 0.1 + i * 0.06 }}
+                  className="glass rounded-xl p-5"
+                >
+                  <div className="flex items-center gap-2 mb-3">
+                    <div
+                      className="w-8 h-8 rounded-lg flex items-center justify-center"
+                      style={{ background: `${k.color}18`, border: `1px solid ${k.color}28` }}
+                    >
+                      <k.icon className="w-4 h-4" style={{ color: k.color }} />
+                    </div>
+                    <span className="text-xs text-slate-500">{k.label}</span>
+                  </div>
+                  <div className="text-2xl font-display font-bold text-white">{k.value}</div>
+                  <div className={`text-xs mt-1 ${k.subColor}`}>{k.sub}</div>
+                </motion.div>
+              ))}
+            </div>
           </div>
 
           {/* Report Type Selector */}

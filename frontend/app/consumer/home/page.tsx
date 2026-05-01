@@ -133,7 +133,7 @@ function PricePredictor({ stdPrice, selectedArea, onAreaChange }: { stdPrice: nu
       )}
 
       {result && (
-        <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }}>
+        <motion.div key={Date.now()} initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }}>
           <div className={`rounded-xl p-5 ${result.surge > 1.1 ? "card-gradient-orange" : result.surge > 1 ? "card-gradient-blue" : "card-gradient-green"} border border-white/10`}>
             <div className="flex items-start justify-between mb-3">
               <div>
