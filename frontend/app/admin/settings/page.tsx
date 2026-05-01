@@ -65,10 +65,10 @@ export default function SettingsPage() {
         <p className="text-slate-500 text-sm mt-1">Manage your account, preferences, and ML engine configurations.</p>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
+      <div className="max-w-2xl space-y-8">
         
         {/* Account & Security */}
-        <div className="md:col-span-2 space-y-6">
+        <div className="space-y-6">
           <motion.section 
             initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.1 }}
             className="glass rounded-xl p-6"
@@ -160,49 +160,7 @@ export default function SettingsPage() {
           </motion.section>
         </div>
 
-        {/* Sidebar Preferences */}
-        <div className="space-y-6">
-          <motion.section 
-            initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.3 }}
-            className="glass rounded-xl p-6"
-          >
-            <h2 className="text-lg font-display font-semibold text-white mb-6">Preferences</h2>
-            
-            <div className="space-y-5">
-              <div>
-                <label className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-3 block">Theme</label>
-                <div className="flex flex-col gap-2">
-                  <button className="flex items-center gap-3 w-full p-2.5 rounded-lg bg-brand-500/20 border border-brand-500/30 text-white text-sm transition-colors text-left">
-                    <Moon className="w-4 h-4 text-brand-400" />
-                    Dark Mode (Active)
-                  </button>
-                  <button className="flex items-center gap-3 w-full p-2.5 rounded-lg hover:bg-white/5 text-slate-400 text-sm transition-colors text-left cursor-not-allowed opacity-50">
-                    <Monitor className="w-4 h-4" />
-                    System Sync
-                  </button>
-                </div>
-              </div>
 
-              <div className="pt-2">
-                <label className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-3 block">Notifications</label>
-                <div className="space-y-3">
-                  <label className="flex items-center gap-3 text-sm text-slate-300">
-                    <input type="checkbox" defaultChecked className="w-4 h-4 rounded border-white/20 bg-dark-800 text-brand-500 focus:ring-brand-500 focus:ring-offset-dark-900" />
-                    Critical Fleet Alerts
-                  </label>
-                  <label className="flex items-center gap-3 text-sm text-slate-300">
-                    <input type="checkbox" defaultChecked className="w-4 h-4 rounded border-white/20 bg-dark-800 text-brand-500 focus:ring-brand-500 focus:ring-offset-dark-900" />
-                    Demand Spikes (Surge &gt; 1.0x)
-                  </label>
-                  <label className="flex items-center gap-3 text-sm text-slate-300">
-                    <input type="checkbox" className="w-4 h-4 rounded border-white/20 bg-dark-800 text-brand-500 focus:ring-brand-500 focus:ring-offset-dark-900" />
-                    Daily Revenue Digest
-                  </label>
-                </div>
-              </div>
-            </div>
-          </motion.section>
-        </div>
 
       </div>
     </div>
