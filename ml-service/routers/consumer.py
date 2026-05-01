@@ -4,6 +4,7 @@ All data is derived from the live SARIMA ML engine — no static fallbacks.
 from fastapi import APIRouter, Request
 from typing import Optional
 from datetime import datetime
+from core.model_engine import BASE_PRICE
 
 router = APIRouter()
 
@@ -195,7 +196,7 @@ async def price_trend(request: Request):
     for s in sampled:
         agg = s["demand"]
         surge = engine.compute_surge(agg)
-        prices.append({"dt": s["dt"], "price": round(65.0 * surge, 2), "demand": s["demand"]})
+        prices.append({"dt": s["dt"], "price": round(BASE_PRICE * surge, 2), "demand": s["demand"]})
     return {"success": True, "data": prices}
 
 
@@ -211,7 +212,7 @@ async def hourly_pricing(request: Request):
     for hr in range(24):
         avg_demand = float(hp.get(hr, hp.mean()))
         surge = engine.compute_surge(avg_demand)
-        price = round(65.0 * surge, 2)
+        price = round(BASE_PRICE * surge, 2)
         if avg_demand < p33:   label = "Low"
         elif avg_demand < p66: label = "Moderate"
         elif avg_demand < p90: label = "High"
@@ -254,7 +255,7 @@ async def weekly_forecast(request: Request):
         else:
             avg_demand = float(engine.hourly_profile.mean())
         surge = engine.compute_surge(avg_demand)
-        price = round(65.0 * surge, 2)
+        price = round(BASE_PRICE * surge, 2)
         if avg_demand < p33:   demand_label = "Low"
         elif avg_demand < p66: demand_label = "Moderate"
         elif avg_demand < p90: demand_label = "High"
