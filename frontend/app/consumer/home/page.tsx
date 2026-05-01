@@ -254,7 +254,7 @@ export default function ConsumerHome() {
               tag: savingNow > 0 ? `Save ₹${savingNow}/hr` : "Good time",
             },
             {
-              icon: "📅",
+              icon: (bestTime.cheapest_day ?? "Wednesday").substring(0, 3).toUpperCase(),
               title: "Cheapest day",
               desc: `${bestTime.cheapest_day ?? "Wednesday"} — avg demand lowest`,
               tag: "Book ahead",
@@ -308,10 +308,16 @@ export default function ConsumerHome() {
           : tips.map((t, i) => (
               <motion.div key={t.title} initial={{ opacity: 0, y: 15 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: i * 0.1 }}
                 className="glass rounded-xl p-4 flex items-start gap-3 hover-lift">
-                <span className="text-2xl">{t.icon}</span>
+                {t.icon.length > 2 ? (
+                  <div className="w-10 h-10 shrink-0 rounded-lg bg-emerald-500/20 text-emerald-400 flex items-center justify-center font-bold text-xs uppercase tracking-wider border border-emerald-500/30 shadow-[0_0_10px_rgba(16,185,129,0.2)]">
+                    {t.icon}
+                  </div>
+                ) : (
+                  <span className="text-3xl shrink-0 drop-shadow-md">{t.icon}</span>
+                )}
                 <div className="flex-1">
-                  <div className="font-medium text-white text-sm">{t.title}</div>
-                  <div className="text-xs text-slate-500 mt-0.5">{t.desc}</div>
+                  <div className="font-semibold text-white text-sm">{t.title}</div>
+                  <div className="text-xs text-slate-300 mt-1 font-medium">{t.desc}</div>
                 </div>
                 <span className="badge-success text-xs whitespace-nowrap">{t.tag}</span>
               </motion.div>
