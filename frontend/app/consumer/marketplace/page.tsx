@@ -185,28 +185,33 @@ export default function MarketplacePage() {
 
       {/* Filters */}
       <div className="glass rounded-xl p-4 space-y-3">
-        <div className="flex items-center gap-3">
-          <Filter className="w-4 h-4 text-slate-400 shrink-0" />
-          <div className="relative flex-1">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-500" />
-            <input value={search} onChange={e => setSearch(e.target.value)}
-              placeholder="Search bikes or areas..."
-              className="input-dark w-full pl-9 py-1.5 text-sm" />
+        <div className="flex flex-col md:flex-row items-start md:items-center gap-3">
+          <div className="flex items-center gap-3 w-full md:w-auto flex-1">
+            <Filter className="w-4 h-4 text-slate-400 shrink-0" />
+            <div className="relative flex-1">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-500" />
+              <input value={search} onChange={e => setSearch(e.target.value)}
+                placeholder="Search bikes or areas..."
+                className="input-dark w-full pl-9 py-1.5 text-sm" />
+            </div>
           </div>
-          <div className="relative shrink-0">
-            <Calendar className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-500" />
-            <input type="datetime-local" 
-              value={targetTime} onChange={e => setTargetTime(e.target.value)}
-              className="input-dark w-full pl-9 py-1.5 text-sm" />
+          
+          <div className="flex items-center gap-3 w-full md:w-auto overflow-x-auto pb-1 md:pb-0">
+            <div className="relative shrink-0">
+              <Calendar className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-500" />
+              <input type="datetime-local" 
+                value={targetTime} onChange={e => setTargetTime(e.target.value)}
+                className="input-dark w-full pl-9 py-1.5 text-sm" />
+            </div>
+            <button onClick={() => setAvailOnly(!availOnly)}
+              className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all shrink-0 ${availOnly ? "bg-emerald-500/20 text-emerald-400 border border-emerald-500/30" : "glass text-slate-400 hover:text-white"}`}>
+              ✓ Available Only
+            </button>
+            <select value={sortBy} onChange={e => setSortBy(e.target.value as any)} className="input-dark text-sm py-1.5 shrink-0">
+              <option value="price">Sort: Price</option>
+              <option value="rating">Sort: Rating</option>
+            </select>
           </div>
-          <button onClick={() => setAvailOnly(!availOnly)}
-            className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all shrink-0 ${availOnly ? "bg-emerald-500/20 text-emerald-400 border border-emerald-500/30" : "glass text-slate-400 hover:text-white"}`}>
-            ✓ Available Only
-          </button>
-          <select value={sortBy} onChange={e => setSortBy(e.target.value as any)} className="input-dark text-sm py-1.5 shrink-0">
-            <option value="price">Sort: Price</option>
-            <option value="rating">Sort: Rating</option>
-          </select>
         </div>
 
         {/* Type pills */}
