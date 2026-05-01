@@ -469,6 +469,7 @@ export default function ConsumerHome() {
           </div>
         </div>
       </div>
+      </div>
     </>
   );
 }
