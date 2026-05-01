@@ -330,12 +330,13 @@ class ModelEngine:
     # ─── Forecast Series for Charts ──────────────────────────────────────────
     def get_short_forecast(self):
         res = []
+        COMBO_SCALE = 48
         for i, (idx, v) in enumerate(self._fc_short["mean"].items()):
-            demand = float(v)
+            demand = float(v) / COMBO_SCALE
             surge = self.compute_surge(demand)
             price = round(BASE_PRICE * surge, 2)
-            lower = float(self._fc_short["ci"].iloc[i, 0])
-            upper = float(self._fc_short["ci"].iloc[i, 1])
+            lower = float(self._fc_short["ci"].iloc[i, 0]) / COMBO_SCALE
+            upper = float(self._fc_short["ci"].iloc[i, 1]) / COMBO_SCALE
             res.append({
                 "dt": str(idx), 
                 "demand": round(demand, 1),
@@ -348,10 +349,11 @@ class ModelEngine:
 
     def get_daily_forecast(self):
         res = []
+        COMBO_SCALE = 48
         for i, (idx, v) in enumerate(self._fc_med["mean"].items()):
-            demand = float(v)
-            lower = float(self._fc_med["ci"].iloc[i, 0])
-            upper = float(self._fc_med["ci"].iloc[i, 1])
+            demand = float(v) / COMBO_SCALE
+            lower = float(self._fc_med["ci"].iloc[i, 0]) / COMBO_SCALE
+            upper = float(self._fc_med["ci"].iloc[i, 1]) / COMBO_SCALE
             res.append({
                 "dt": str(idx.date()), 
                 "demand": round(demand, 1),
