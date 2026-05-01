@@ -147,7 +147,7 @@ export const getPricingRec = (area: string, hour: number, is_weekend = false, da
 
 export const getEventPricing = () => apiFetch<any[]>(`${ML_API}/admin/pricing/events`);
 
-export const getSurgeConfig = () => apiFetch<{ peak_surge: number; event_multiplier: number }>(`${ML_API}/admin/ml-config`, {}, 'config');
+export const getSurgeConfig = () => apiFetch<any>(`${ML_API}/admin/ml-config`).then(res => res.config);
 
 export const updateSurgeConfig = async (config: { peak_surge: number; event_multiplier: number }) => {
   const res = await fetch(`${ML_API}/admin/ml-config`, {
