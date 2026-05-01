@@ -69,14 +69,16 @@ function PricePredictor({ stdPrice }: { stdPrice: number }) {
       const baseP  = BASE_PRICES[form.model] ?? 65;
       const scaled = parseFloat((baseP * res.surge_multiplier).toFixed(2));
       setIsLive(res.expected_demand % 10 !== 0);
+      setIsLive(res.expected_demand % 10 !== 0);
+
       setResult({
         price:   scaled,
         surge:   res.surge_multiplier,
         label:   res.price_label,
         demand:  res.demand_level,
         saving:  parseFloat((baseP * 1.25 - scaled).toFixed(2)),
-        altTime: res.surge_multiplier > 1.0 ? `${stdPrice === 65 ? "11" : "10"}:00 AM` : null,
-        altPrice: stdPrice,
+        altTime: res.surge_multiplier > 1.0 ? res.alt_time : null,
+        altPrice: baseP,
       });
     } catch {
       setError("Prediction failed. Check your connection.");

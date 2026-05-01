@@ -38,6 +38,8 @@ async def predict_price(req: PredictRequest, request: Request):
                 "savings_vs_peak":    result["savings_vs_peak"],
                 "base_price":         result["base_price"],
                 "confidence_interval": result["confidence_interval"],
+                "alt_time":           result.get("alt_time"),
+                "alt_price":          result.get("alt_price"),
             }
         }
     except Exception as e:

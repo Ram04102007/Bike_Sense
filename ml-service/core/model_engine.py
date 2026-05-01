@@ -269,6 +269,48 @@ class ModelEngine:
         elif base_agg < p90:  demand_level = "High"
         else:                 demand_level = "Very High"
 
+        # Find best alternative time if currently surging
+        alt_time = None
+        alt_price = price
+        if surge > 1.0:
+            min_price = price
+            best_dt = None
+            for test_h in range(24):
+                if test_h == hr: continue
+                test_dt = pd.to_datetime(f"{date} {test_h:02d}:00")
+                test_delta = (test_dt.normalize() - today).days
+                
+                if test_delta <= 7 and test_dt in self._fc_short["mean"].index:
+                    test_agg = float(self._fc_short["mean"][test_dt])
+                elif test_delta <= 30:
+                    test_d = test_dt.normalize()
+                    if test_d in self._fc_med["mean"].index:
+                        t_dem = float(self._fc_med["mean"][test_d])
+                    else:
+                        t_dem = float(self.fit_daily.get_forecast(max(1, (test_d.date() - self.daily_ts.index[-1].date()).days)).predicted_mean.iloc[-1])
+                    t_norm = float(self.hourly_profile_norm[test_h]) / self.hourly_profile_norm.mean()
+                    test_agg = max(0, (t_dem / 24.0) * t_norm)
+                else:
+                    test_me = test_dt.to_period("M").to_timestamp("M")
+                    if test_me in self._fc_long["mean"].index:
+                        t_dem = float(self._fc_long["mean"][test_me])
+                    else:
+                        t_dem = float(self.fit_monthly.get_forecast(1).predicted_mean.iloc[-1])
+                    t_dem_d = t_dem / test_dt.days_in_month
+                    t_norm  = float(self.hourly_profile_norm[test_h]) / self.hourly_profile_norm.mean()
+                    test_agg = max(0, (t_dem_d / 24.0) * t_norm)
+                    
+                test_surge = self.compute_surge(test_agg, date)
+                test_price = round(BASE_PRICE * test_surge, 2)
+                
+                if test_price < min_price:
+                    min_price = test_price
+                    best_dt = test_dt
+                    
+            if best_dt:
+                alt_time = best_dt.strftime("%I:%M %p")
+                alt_price = min_price
+
         return {
             "datetime":      query_dt.strftime("%A, %d %B %Y %H:%M"),
             "location":      location,
@@ -281,6 +323,8 @@ class ModelEngine:
             "predicted_price": price,
             "price_label":   labels.get(surge, "Standard"),
             "savings_vs_peak": round(81.25 - price, 2),
+            "alt_time":      alt_time,
+            "alt_price":     alt_price,
         }
 
     # ─── Forecast Series for Charts ──────────────────────────────────────────

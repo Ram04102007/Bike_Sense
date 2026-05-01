@@ -57,6 +57,8 @@ export interface PredictionResult {
   predicted_price: number;
   price_label: string;
   savings_vs_peak: number;
+  alt_time?: string;
+  alt_price?: number;
 }
 
 export interface ForecastPoint {
@@ -110,7 +112,7 @@ export const predictDemand = (input: PredictInput) =>
   );
 
 export const predictPrice = (input: PredictInput) =>
-  apiFetch<{ predicted_price: number; surge_multiplier: number; price_label: string; demand_level: string; savings_vs_peak: number; base_price: number; confidence_interval: [number, number] }>(
+  apiFetch<{ predicted_price: number; surge_multiplier: number; price_label: string; demand_level: string; savings_vs_peak: number; base_price: number; confidence_interval: [number, number]; alt_time?: string; alt_price?: number; }>(
     `${ML_API}/predict-price`,
     { method: "POST", body: JSON.stringify({ ...input, location: input.location ?? "Bangalore", bike_model: input.bike_model ?? "All" }) }
   );
