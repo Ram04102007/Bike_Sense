@@ -279,21 +279,64 @@ export default function AdminDashboard() {
         <div className="glass rounded-xl p-6">
           <div className="flex items-center justify-between mb-4">
             <h3 className="font-display font-semibold text-white">Live Alerts</h3>
-            <Zap className="w-4 h-4 text-amber-400" />
+            <div className="flex items-center gap-2">
+              <span className="w-2 h-2 rounded-full bg-amber-400 animate-pulse" />
+              <span className="text-xs text-amber-400 font-medium">Live</span>
+            </div>
           </div>
           <div className="space-y-3">
-            {alerts.map((a, i) => (
-              <motion.div key={i} initial={{ opacity: 0, x: -10 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: i * 0.1 }}
-                className="flex gap-3 p-3 glass-light rounded-lg">
-                {a.type === "warning" && <AlertTriangle className="w-4 h-4 text-amber-400 shrink-0 mt-0.5" />}
-                {a.type === "success" && <CheckCircle className="w-4 h-4 text-emerald-400 shrink-0 mt-0.5" />}
-                {a.type === "info"    && <Activity className="w-4 h-4 text-blue-400 shrink-0 mt-0.5" />}
-                <div>
-                  <p className="text-xs text-slate-200">{a.msg}</p>
-                  <p className="text-xs text-slate-600 mt-0.5">{a.time}</p>
-                </div>
-              </motion.div>
-            ))}
+            {alerts.map((a: any, i: number) => {
+              const isCritical  = a.type === "critical";
+              const isRebalance = a.type === "rebalance";
+              const isInfo      = a.type === "info";
+              return (
+                <motion.div
+                  key={i}
+                  initial={{ opacity: 0, x: -10 }}
+                  animate={{ opacity: 1, x: 0 }}
+                  transition={{ delay: i * 0.1 }}
+                  className={`rounded-xl p-3 border ${
+                    isCritical  ? "bg-red-500/8 border-red-500/20"
+                    : isRebalance ? "bg-amber-500/8 border-amber-500/20"
+                    : "bg-blue-500/8 border-blue-500/20"
+                  }`}
+                >
+                  <div className="flex gap-3 items-start">
+                    <div className={`mt-0.5 shrink-0 w-7 h-7 rounded-lg flex items-center justify-center ${
+                      isCritical  ? "bg-red-500/15"
+                      : isRebalance ? "bg-amber-500/15"
+                      : "bg-blue-500/15"
+                    }`}>
+                      {isCritical  && <AlertTriangle className="w-4 h-4 text-red-400" />}
+                      {isRebalance && <RefreshCw className="w-4 h-4 text-amber-400" />}
+                      {isInfo      && <Activity className="w-4 h-4 text-blue-400" />}
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center justify-between gap-2 mb-0.5">
+                        <p className={`text-xs font-semibold ${
+                          isCritical ? "text-red-300" : isRebalance ? "text-amber-300" : "text-blue-300"
+                        }`}>{a.title}</p>
+                        <p className="text-[10px] text-slate-600 shrink-0">{a.time}</p>
+                      </div>
+                      <p className="text-xs text-slate-300 leading-relaxed">{a.msg}</p>
+                      {a.action && (
+                        <div className="mt-2 flex items-center gap-2 flex-wrap">
+                          <span className="inline-flex items-center gap-1.5 text-[10px] font-bold bg-amber-500/20 text-amber-300 border border-amber-500/30 px-2 py-1 rounded-full">
+                            <RefreshCw className="w-2.5 h-2.5" />
+                            {a.action}
+                          </span>
+                          {a.bikes && (
+                            <span className="text-[10px] text-slate-500">
+                              {a.bikes} bikes · {a.area_low} → {a.area_high}
+                            </span>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </motion.div>
+              );
+            })}
           </div>
           {lastRefresh && (
             <p className="text-xs text-slate-700 mt-4 text-right">

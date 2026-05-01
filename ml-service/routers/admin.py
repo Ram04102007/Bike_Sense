@@ -200,59 +200,142 @@ async def get_fleet_models(request: Request):
 
 @router.get("/alerts")
 async def get_live_alerts(request: Request):
-    """Dynamic live alerts based on actual ML engine predictions."""
-    import random
+    """
+    Intelligent multi-hour ML-driven alerts with actionable bike rebalancing recommendations.
+    Scans the next 3 hours across all zones using SARIMA predictions, identifies demand imbalances,
+    and generates specific move-bikes-from-X-to-Y instructions.
+    """
     from datetime import datetime, timedelta
     engine = request.app.state.engine
     alerts = []
-    
     now = datetime.now()
-    next_time = now + timedelta(hours=1)
-    next_hour = next_time.hour
-    is_wknd = next_time.weekday() >= 5
-    date_str = next_time.strftime("%Y-%m-%d")
-    
-    areas = ["Indiranagar", "Koramangala", "Whitefield", "Marathahalli", "HSR Layout", "Jayanagar", "Electronic City", "Hebbal"]
-    
-    # Evaluate surge for next hour to generate a predictive alert
-    surges = []
-    for a in areas:
-        rec = engine.get_price_recommendation(a, next_hour, is_wknd, date=date_str)
-        surges.append((a, rec["surge_multiplier"]))
-    
-    # Sort by highest surge
-    surges.sort(key=lambda x: x[1], reverse=True)
-    top_area, top_surge = surges[0]
-    
-    if top_surge > 1.0:
-        time_str = f"{(next_hour % 12) or 12} {'AM' if next_hour < 12 else 'PM'}"
-        alerts.append({
-            "type": "warning",
-            "msg": f"{top_area} demand spike expected at {time_str} (SARIMA forecast: {top_surge}x surge)",
-            "time": "Just now"
-        })
-    else:
-        alerts.append({
-            "type": "info",
-            "msg": "Demand stable across all zones for the next hour.",
-            "time": "Just now"
-        })
-    
-    # Generate Rebalance Alert based on secondary demand zones
-    rebalance_area = surges[1][0] if len(surges) > 1 else areas[0]
+
+    areas = [
+        "Indiranagar", "Koramangala", "Whitefield", "Marathahalli",
+        "HSR Layout", "Jayanagar", "Electronic City", "Hebbal"
+    ]
+
+    # Base fleet counts per area (mirrors fleet endpoint)
+    base_fleet = {
+        "Indiranagar": 250, "Koramangala": 220, "Whitefield": 180,
+        "Marathahalli": 160, "HSR Layout": 190, "Jayanagar": 140,
+        "Electronic City": 130, "Hebbal": 110
+    }
+
+    # ── STEP 1: Scan next 3 hours across all zones ───────────────────────────
+    # For each future hour, get SARIMA demand + surge for every area
+    horizon = []  # list of (hour_offset, hour_val, area, surge, demand_idx, available_bikes)
+    for h_offset in range(1, 4):
+        future = now + timedelta(hours=h_offset)
+        fh = future.hour
+        is_wknd = future.weekday() >= 5
+        date_str = future.strftime("%Y-%m-%d")
+        hour_str = future.strftime("%I:%M %p").lstrip("0")
+
+        for area in areas:
+            rec = engine.get_price_recommendation(area, fh, is_wknd, date=date_str)
+            surge     = rec.get("surge_multiplier", 1.0)
+            demand    = rec.get("demand_index", 1.0)
+            total     = base_fleet[area]
+            in_use    = min(int(total * 0.35 * demand), int(total * 0.85))
+            available = total - in_use - int(total * 0.05)  # minus maintenance
+            horizon.append({
+                "h_offset": h_offset,
+                "hour_str": hour_str,
+                "area": area,
+                "surge": surge,
+                "demand": demand,
+                "available": available,
+                "total": total,
+            })
+
+    # ── STEP 2: Find the HOTTEST zone in the next 3 hours ────────────────────
+    horizon_sorted_high = sorted(horizon, key=lambda x: x["surge"], reverse=True)
+    hot  = horizon_sorted_high[0]   # highest surge zone + hour
+
+    # Find the COOLEST zone at the same future hour (donor zone)
+    same_hour_zones = [z for z in horizon if z["h_offset"] == hot["h_offset"]]
+    same_hour_sorted_low = sorted(same_hour_zones, key=lambda x: x["surge"])
+    cool = same_hour_sorted_low[0]  # lowest surge zone at that hour
+
+    # ── STEP 3: Compute how many bikes to move ────────────────────────────────
+    # Deficit = how many more bikes the hot zone needs at that surge level
+    # Surplus = how many extra bikes the cool zone can spare
+    hot_deficit  = max(0, int(hot["total"]  * 0.35 * hot["surge"])  - hot["available"])
+    cool_surplus = max(0, cool["available"] - int(cool["total"] * 0.35))
+    bikes_to_move = min(hot_deficit, cool_surplus, 30)  # cap at 30 bikes per alert
+    bikes_to_move = max(bikes_to_move, 5)  # always recommend at least 5
+
+    # ── STEP 4: Generate ALERT 1 — Surge Spike Warning ───────────────────────
     alerts.append({
-        "type": "success",
-        "msg": f"Fleet proactively rebalanced in {rebalance_area} ahead of predicted demand.",
-        "time": f"{random.randint(5, 15)} min ago"
+        "type": "critical",
+        "title": "Surge Spike Predicted",
+        "msg": (
+            f"SARIMA forecasts {hot['surge']:.2f}x surge in {hot['area']} "
+            f"at {hot['hour_str']} (demand index: {hot['demand']:.2f}). "
+            f"Only {hot['available']} bikes currently available."
+        ),
+        "action": None,
+        "time": "Just now",
+        "area_high": hot["area"],
+        "area_low": None,
+        "bikes": None,
     })
-    
-    # 3. System info
+
+    # ── STEP 5: Generate ALERT 2 — Rebalancing Action Required ───────────────
+    alerts.append({
+        "type": "rebalance",
+        "title": "⚡ Rebalancing Required",
+        "msg": (
+            f"Move {bikes_to_move} bikes from {cool['area']} "
+            f"({cool['surge']:.2f}x — low demand, {cool['available']} idle) "
+            f"→ {hot['area']} before {hot['hour_str']} to meet predicted surge demand."
+        ),
+        "action": f"Move {bikes_to_move} bikes: {cool['area']} → {hot['area']}",
+        "time": "Just now",
+        "area_high": hot["area"],
+        "area_low": cool["area"],
+        "bikes": bikes_to_move,
+    })
+
+    # ── STEP 6: Scan for a 2nd independent surge zone (different from hot) ───
+    other_hot_list = [z for z in horizon_sorted_high if z["area"] != hot["area"]]
+    if other_hot_list:
+        other_hot  = other_hot_list[0]
+        other_cool_list = [
+            z for z in horizon if z["h_offset"] == other_hot["h_offset"] and z["area"] != other_hot["area"]
+        ]
+        other_cool_sorted = sorted(other_cool_list, key=lambda x: x["surge"])
+        if other_cool_sorted:
+            other_cool = other_cool_sorted[0]
+            other_bikes = max(5, min(15, int(other_hot["total"] * 0.1)))
+            alerts.append({
+                "type": "rebalance",
+                "title": "Secondary Demand Zone",
+                "msg": (
+                    f"Moderate demand rising in {other_hot['area']} at {other_hot['hour_str']} "
+                    f"({other_hot['surge']:.2f}x surge). Recommend moving {other_bikes} bikes "
+                    f"from {other_cool['area']} as a precaution."
+                ),
+                "action": f"Move {other_bikes} bikes: {other_cool['area']} → {other_hot['area']}",
+                "time": "1 min ago",
+                "area_high": other_hot["area"],
+                "area_low": other_cool["area"],
+                "bikes": other_bikes,
+            })
+
+    # ── STEP 7: System heartbeat alert ───────────────────────────────────────
     alerts.append({
         "type": "info",
-        "msg": "ML model predictions actively syncing with fleet routing.",
-        "time": f"{random.randint(1, 3)} hr ago"
+        "title": "ML Engine Active",
+        "msg": f"SARIMA models scanning {len(areas)} zones across 3-hour horizon. Last trained on historical Bangalore ride data.",
+        "action": None,
+        "time": "Live",
+        "area_high": None,
+        "area_low": None,
+        "bikes": None,
     })
-    
+
     return {"success": True, "data": alerts}
 
 
