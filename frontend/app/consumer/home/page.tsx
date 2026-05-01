@@ -1,13 +1,13 @@
 "use client";
 import { useState, useEffect } from "react";
-import { motion } from "framer-motion";
+import { motion, AnimatePresence } from "framer-motion";
 import {
   AreaChart, Area, XAxis, YAxis,
   CartesianGrid, Tooltip, ResponsiveContainer,
 } from "recharts";
 import {
   MapPin, Clock, Zap, TrendingUp, Star, Battery, ChevronRight,
-  Sparkles, AlertTriangle, CheckCircle, RefreshCw, WifiOff,
+  Sparkles, AlertTriangle, CheckCircle, RefreshCw, WifiOff, Bike
 } from "lucide-react";
 import {
   predictDemand, getBikes, getBestTime, getHourlyPricing,
@@ -181,6 +181,12 @@ export default function ConsumerHome() {
   const [loadingBikes,  setLoadingBikes]  = useState(true);
   const [loadingCharts, setLoadingCharts] = useState(true);
   const [isLive,        setIsLive]        = useState(false);
+  const [showSplash,    setShowSplash]    = useState(true);
+
+  useEffect(() => {
+    const timer = setTimeout(() => setShowSplash(false), 2000);
+    return () => clearTimeout(timer);
+  }, []);
 
   // Auto-detect closest zone based on user's location
   useEffect(() => {
@@ -279,9 +285,60 @@ export default function ConsumerHome() {
   }, [selectedArea]);
 
   return (
-    <div className="space-y-6">
-      {/* Welcome */}
-      <div className="flex items-start justify-between">
+    <>
+      <AnimatePresence>
+        {showSplash && (
+          <motion.div
+            initial={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.5, ease: "easeInOut" }}
+            className="fixed inset-0 z-50 flex items-center justify-center bg-dark-900 pointer-events-none"
+          >
+            <motion.div
+              initial={{ scale: 0.9, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              transition={{ duration: 0.4 }}
+              className="text-center flex flex-col items-center"
+            >
+              <motion.div
+                initial={{ x: -100, opacity: 0 }}
+                animate={{ x: 0, opacity: 1 }}
+                transition={{ type: "spring", damping: 15, stiffness: 100, delay: 0.2 }}
+                className="w-16 h-16 bg-emerald-500 rounded-2xl flex items-center justify-center shadow-[0_0_30px_rgba(16,185,129,0.3)] mb-6"
+              >
+                <motion.div
+                  animate={{ rotate: [-5, 5, -5] }}
+                  transition={{ repeat: Infinity, duration: 1 }}
+                >
+                  <Bike className="w-8 h-8 text-white" />
+                </motion.div>
+              </motion.div>
+              
+              <motion.h1
+                initial={{ y: 10, opacity: 0 }}
+                animate={{ y: 0, opacity: 1 }}
+                transition={{ delay: 0.4 }}
+                className="text-3xl font-display font-bold text-white tracking-tight"
+              >
+                Bike<span className="text-emerald-400">Sense</span>
+              </motion.h1>
+              
+              <motion.p
+                initial={{ y: 10, opacity: 0 }}
+                animate={{ y: 0, opacity: 1 }}
+                transition={{ delay: 0.6 }}
+                className="text-slate-400 mt-2 text-sm"
+              >
+                Finding the best rides near you...
+              </motion.p>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      <div className="space-y-6">
+        {/* Welcome */}
+        <div className="flex items-start justify-between">
         <div>
           <h1 className="font-display font-bold text-2xl text-white">Welcome back 👋</h1>
           <p className="text-slate-500 text-sm mt-0.5">Find the best bike deals in Bangalore today</p>
@@ -412,6 +469,6 @@ export default function ConsumerHome() {
           </div>
         </div>
       </div>
-    </div>
+    </>
   );
 }
