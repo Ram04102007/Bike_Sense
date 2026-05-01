@@ -9,7 +9,7 @@ import {
   DollarSign, Zap, TrendingUp, RefreshCw,
   WifiOff, MapPin, Clock, Activity, Info,
 } from "lucide-react";
-import { getPricingRec, getHourlyPriceSchedule, getZonePriceMatrix, getEventPricing } from "@/lib/api";
+import { getPricingRec, getHourlyPriceSchedule, getZonePriceMatrix, getEventPricing, getSurgeConfig, updateSurgeConfig } from "@/lib/api";
 
 const AREAS = [
   "Indiranagar","Koramangala","Whitefield","Marathahalli",
@@ -82,6 +82,39 @@ export default function PricingPage() {
   // Events Data
   const [eventsData, setEventsData]     = useState<any[]>([]);
   const [eventsLoading, setEventsLoading] = useState(true);
+
+  // Surge Config
+  const [surgeConfig, setSurgeConfig] = useState<{ peak_surge: number; event_multiplier: number } | null>(null);
+  const [surgeConfigLoading, setSurgeConfigLoading] = useState(true);
+  const [surgeConfigSaving, setSurgeConfigSaving] = useState(false);
+
+  const fetchSurgeConfig = useCallback(async () => {
+    setSurgeConfigLoading(true);
+    try {
+      const data = await getSurgeConfig();
+      setSurgeConfig(data);
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setSurgeConfigLoading(false);
+    }
+  }, []);
+
+  useEffect(() => { fetchSurgeConfig(); }, [fetchSurgeConfig]);
+
+  const handleSaveSurgeConfig = async () => {
+    if (!surgeConfig) return;
+    setSurgeConfigSaving(true);
+    try {
+      await updateSurgeConfig(surgeConfig);
+      fetchRecommendation(); // Refresh current rec with new surge
+      fetchHourly(); // Refresh charts
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setSurgeConfigSaving(false);
+    }
+  };
 
   // ── ML Calculator ─────────────────────────────────────────────────────────
   const fetchRecommendation = useCallback(async () => {
@@ -307,6 +340,51 @@ export default function PricingPage() {
               <div className="text-xs text-slate-600 mt-0.5">
                 Set by model engine constant · not user-adjustable
               </div>
+            </div>
+
+            {/* Surge Configuration Widget */}
+            <div className="p-3 glass-light rounded-lg space-y-4">
+              <div className="flex items-center justify-between mb-2">
+                <div className="flex items-center gap-1.5">
+                  <Activity className="w-3 h-3 text-brand-400" />
+                  <span className="text-xs text-white font-medium">Surge Constraints</span>
+                </div>
+                {surgeConfigSaving && <RefreshCw className="w-3 h-3 text-brand-400 animate-spin" />}
+              </div>
+
+              {surgeConfigLoading ? (
+                <div className="animate-pulse space-y-3">
+                  <div className="h-6 bg-white/10 rounded" />
+                  <div className="h-6 bg-white/10 rounded" />
+                </div>
+              ) : surgeConfig ? (
+                <>
+                  <div>
+                    <div className="flex justify-between text-xs mb-1">
+                      <span className="text-slate-400">Peak Surge Limit</span>
+                      <span className="font-mono text-brand-300">×{surgeConfig.peak_surge.toFixed(2)}</span>
+                    </div>
+                    <input type="range" min={1.0} max={3.0} step={0.05} value={surgeConfig.peak_surge}
+                      onChange={e => setSurgeConfig({...surgeConfig, peak_surge: parseFloat(e.target.value)})}
+                      className="w-full accent-brand-500" />
+                  </div>
+                  <div>
+                    <div className="flex justify-between text-xs mb-1">
+                      <span className="text-slate-400">Event Multiplier</span>
+                      <span className="font-mono text-brand-300">×{surgeConfig.event_multiplier.toFixed(2)}</span>
+                    </div>
+                    <input type="range" min={1.0} max={3.0} step={0.05} value={surgeConfig.event_multiplier}
+                      onChange={e => setSurgeConfig({...surgeConfig, event_multiplier: parseFloat(e.target.value)})}
+                      className="w-full accent-brand-500" />
+                  </div>
+                  <button 
+                    onClick={handleSaveSurgeConfig}
+                    disabled={surgeConfigSaving}
+                    className="w-full mt-2 py-1.5 bg-brand-500/20 hover:bg-brand-500/30 text-brand-300 text-xs font-medium rounded transition-colors disabled:opacity-50">
+                    {surgeConfigSaving ? "Saving..." : "Apply Constraints"}
+                  </button>
+                </>
+              ) : null}
             </div>
           </div>
 
