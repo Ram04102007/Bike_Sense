@@ -30,10 +30,17 @@ BASE_PRICE_BY_TYPE = {
 
 
 @router.get("/bikes")
-async def get_bikes(request: Request, area: Optional[str] = None, bike_type: Optional[str] = None):
+async def get_bikes(request: Request, area: Optional[str] = None, bike_type: Optional[str] = None, target_time: Optional[str] = None):
     """Return available bikes with ML-computed dynamic pricing per zone/hour."""
     engine = request.app.state.engine
-    now = datetime.now()
+    if target_time:
+        try:
+            now = datetime.fromisoformat(target_time.replace("Z", "+00:00"))
+        except ValueError:
+            now = datetime.now()
+    else:
+        now = datetime.now()
+    
     current_hour = now.hour
     is_weekend = now.weekday() >= 5
 

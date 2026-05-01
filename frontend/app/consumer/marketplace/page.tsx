@@ -1,7 +1,7 @@
 "use client";
 import { useState, useEffect, useCallback } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { Bike, Battery, Star, MapPin, Filter, Search, Zap, ChevronRight, RefreshCw, WifiOff } from "lucide-react";
+import { Bike, Battery, Star, MapPin, Filter, Search, Zap, ChevronRight, RefreshCw, WifiOff, Calendar } from "lucide-react";
 import { getBikes, type BikeItem } from "@/lib/api";
 
 // ─── Bike metadata not returned by the API (colour, emoji, desc) ─────────────
@@ -124,12 +124,14 @@ export default function MarketplacePage() {
   const [search,     setSearch]     = useState("");
   const [sortBy,     setSortBy]     = useState<"price" | "rating">("price");
   const [availOnly,  setAvailOnly]  = useState(false);
+  const [targetTime, setTargetTime] = useState("");
 
   const fetchBikes = useCallback(async () => {
     setLoading(true);
     setError(null);
     try {
-      const data = await getBikes();
+      const formattedTime = targetTime ? new Date(targetTime).toISOString() : undefined;
+      const data = await getBikes(undefined, undefined, formattedTime);
       setBikes(data);
       // Detect live data: real backend returns non-round ratings
       setIsLive(data.length > 0 && data[0].rating % 1 !== 0 || data.length > 8);
@@ -138,7 +140,7 @@ export default function MarketplacePage() {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [targetTime]);
 
   useEffect(() => { fetchBikes(); }, [fetchBikes]);
 
@@ -189,6 +191,12 @@ export default function MarketplacePage() {
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-500" />
             <input value={search} onChange={e => setSearch(e.target.value)}
               placeholder="Search bikes or areas..."
+              className="input-dark w-full pl-9 py-1.5 text-sm" />
+          </div>
+          <div className="relative shrink-0">
+            <Calendar className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-500" />
+            <input type="datetime-local" 
+              value={targetTime} onChange={e => setTargetTime(e.target.value)}
               className="input-dark w-full pl-9 py-1.5 text-sm" />
           </div>
           <button onClick={() => setAvailOnly(!availOnly)}

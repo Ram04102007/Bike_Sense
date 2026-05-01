@@ -170,10 +170,13 @@ export const getZonePriceMatrix = (is_weekend = false, date?: string, hour?: num
 };
 
 // ─── Consumer APIs ────────────────────────────────────────────────────────────
-export const getBikes = (area?: string, type?: string) =>
-  apiFetch<BikeItem[]>(
-    `${ML_API}/consumer/bikes${area ? `?area=${encodeURIComponent(area)}` : ""}${type ? `${area ? "&" : "?"}bike_type=${encodeURIComponent(type)}` : ""}`
-  );
+export const getBikes = (area?: string, type?: string, targetTime?: string) => {
+  const params = new URLSearchParams();
+  if (area && area !== "All") params.append("area", area);
+  if (type && type !== "All") params.append("bike_type", type);
+  if (targetTime) params.append("target_time", targetTime);
+  return apiFetch<BikeItem[]>(`${ML_API}/consumer/bikes${params.toString() ? `?${params.toString()}` : ""}`);
+};
 
 export const getBestTime        = (area?: string) => apiFetch<any>(`${ML_API}/consumer/best-time${area ? `?area=${encodeURIComponent(area)}` : ""}`);
 export const getRecommendations = (area?: string) => apiFetch<any>(`${ML_API}/consumer/recommendations${area ? `?area=${encodeURIComponent(area)}` : ""}`);
