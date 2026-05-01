@@ -166,5 +166,5 @@ export const getBikes = (area?: string, type?: string) =>
 export const getBestTime        = (area?: string) => apiFetch<any>(`${ML_API}/consumer/best-time${area ? `?area=${encodeURIComponent(area)}` : ""}`);
 export const getRecommendations = (area?: string) => apiFetch<any>(`${ML_API}/consumer/recommendations${area ? `?area=${encodeURIComponent(area)}` : ""}`);
 export const getPriceTrend      = () => apiFetch<{ dt: string; price: number; demand: number }[]>(`${ML_API}/consumer/price-trend`);
-export const getHourlyPricing    = () => apiFetch<HourlyPricePoint[]>(`${ML_API}/consumer/hourly-pricing`);
+export const getHourlyPricing    = (area?: string) => apiFetch<HourlyPricePoint[]>(`${ML_API}/consumer/hourly-pricing${area ? `?area=${encodeURIComponent(area)}` : ""}`);
 export const getWeeklyDayForecast = () => apiFetch<WeeklyDayForecast[]>(`${ML_API}/consumer/weekly-forecast`);

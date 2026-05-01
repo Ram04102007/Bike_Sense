@@ -53,8 +53,8 @@ function Skeleton({ className = "" }: { className?: string }) {
 }
 
 // ─── Dynamic Price Predictor (uses real backend) ──────────────────────────────
-function PricePredictor({ stdPrice }: { stdPrice: number }) {
-  const [form,    setForm]    = useState({ area: "Indiranagar", model: "Ather 450X", date: "", time: "09:00" });
+function PricePredictor({ stdPrice, selectedArea, onAreaChange }: { stdPrice: number, selectedArea: string, onAreaChange: (a: string) => void }) {
+  const [form,    setForm]    = useState({ model: "Ather 450X", date: "", time: "09:00" });
   const [result,  setResult]  = useState<any>(null);
   const [loading, setLoading] = useState(false);
   const [isLive,  setIsLive]  = useState<boolean | null>(null);
@@ -65,7 +65,7 @@ function PricePredictor({ stdPrice }: { stdPrice: number }) {
     setError(null);
     try {
       const date = form.date || new Date().toISOString().split("T")[0];
-      const res = await predictDemand({ date, time: form.time, location: form.area, bike_model: form.model });
+      const res = await predictDemand({ date, time: form.time, location: selectedArea, bike_model: form.model });
       const baseP  = BASE_PRICES[form.model] ?? 65;
       const scaled = parseFloat((baseP * res.surge_multiplier).toFixed(2));
       setIsLive(res.expected_demand % 10 !== 0);
@@ -100,7 +100,7 @@ function PricePredictor({ stdPrice }: { stdPrice: number }) {
       <div className="grid sm:grid-cols-2 gap-3 mb-4">
         <div>
           <label className="text-xs text-slate-500 mb-1.5 block">Pickup Area</label>
-          <select value={form.area} onChange={e => setForm({ ...form, area: e.target.value })} className="input-dark w-full">
+          <select value={selectedArea} onChange={e => onAreaChange(e.target.value)} className="input-dark w-full">
             {AREAS.map(a => <option key={a} value={a}>{a}</option>)}
           </select>
         </div>
@@ -174,6 +174,7 @@ function PricePredictor({ stdPrice }: { stdPrice: number }) {
 
 // ─── Main Page ────────────────────────────────────────────────────────────────
 export default function ConsumerHome() {
+  const [selectedArea, setSelectedArea] = useState("Indiranagar"); // Default nearby location
   const [bikes,       setBikes]       = useState<BikeItem[]>([]);
   const [hourlyData,  setHourlyData]  = useState<HourlyPricePoint[]>([]);
   const [tips,        setTips]        = useState<{ icon: string; title: string; desc: string; tag: string }[]>([]);
@@ -193,7 +194,7 @@ export default function ConsumerHome() {
     const loadBikes = async () => {
       setLoadingBikes(true);
       try {
-        const data = await getBikes();
+        const data = await getBikes(selectedArea);
         setBikes(data.filter(b => b.available).slice(0, 4));
         setIsLive(data.length > 0);
       } catch { /* fallback empty */ }
@@ -204,7 +205,7 @@ export default function ConsumerHome() {
     const loadCharts = async () => {
       setLoadingCharts(true);
       try {
-        const [hourly, bestTime] = await Promise.all([getHourlyPricing(), getBestTime()]);
+        const [hourly, bestTime] = await Promise.all([getHourlyPricing(selectedArea), getBestTime(selectedArea)]);
         setHourlyData(hourly);
 
         // Build tips from live best-time API data
@@ -242,7 +243,7 @@ export default function ConsumerHome() {
 
     loadBikes();
     loadCharts();
-  }, []);
+  }, [selectedArea]);
 
   return (
     <div className="space-y-6">
@@ -287,7 +288,7 @@ export default function ConsumerHome() {
       <div className="grid lg:grid-cols-5 gap-6">
         {/* Price Predictor */}
         <div className="lg:col-span-2">
-          <PricePredictor stdPrice={stdPrice} />
+          <PricePredictor stdPrice={stdPrice} selectedArea={selectedArea} onAreaChange={setSelectedArea} />
         </div>
 
         {/* Right Column */}

@@ -201,29 +201,20 @@ async def price_trend(request: Request):
 
 
 @router.get("/hourly-pricing")
-async def hourly_pricing(request: Request):
+async def hourly_pricing(request: Request, area: str = "Indiranagar"):
     """24-hour price & demand profile from SARIMA hourly model."""
     engine = request.app.state.engine
-    hp = engine.hourly_profile
-    p33 = float(engine.hourly_ts["cnt"].quantile(0.33))
-    p66 = float(engine.hourly_ts["cnt"].quantile(0.66))
-    p90 = float(engine.hourly_ts["cnt"].quantile(0.90))
+    is_weekend = datetime.now().weekday() >= 5
     result = []
     for hr in range(24):
-        avg_demand = float(hp.get(hr, hp.mean()))
-        surge = engine.compute_surge(avg_demand)
-        price = round(BASE_PRICE * surge, 2)
-        if avg_demand < p33:   label = "Low"
-        elif avg_demand < p66: label = "Moderate"
-        elif avg_demand < p90: label = "High"
-        else:                  label = "Very High"
+        rec = engine.get_price_recommendation(area, hr, is_weekend)
         result.append({
             "hour": hr,
             "hour_label": f"{hr:02d}:00",
-            "price": price,
-            "demand": round(avg_demand, 1),
-            "demand_label": label,
-            "surge": surge,
+            "price": rec["recommended_price"],
+            "demand": round(rec["demand_index"], 1),
+            "demand_label": rec["tier"],
+            "surge": rec["surge_multiplier"],
         })
     return {"success": True, "data": result}
 
