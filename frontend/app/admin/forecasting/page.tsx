@@ -107,6 +107,7 @@ export default function ForecastingPage() {
 
   const [heatmapDate, setHeatmapDate] = useState("");
   const [heatmapLoading, setHeatmapLoading] = useState(false);
+  const [selectedTrajectoryDay, setSelectedTrajectoryDay] = useState<string | null>(null);
 
   const fetchHeatmap = async (dateStr: string) => {
     setHeatmapLoading(true);
@@ -161,6 +162,12 @@ export default function ForecastingPage() {
 
   // Every 6th point for the hourly chart (thinned so X axis is readable)
   const displayHourly = hourlyData.filter((_, i) => i % 2 === 0);
+
+  // Interactive Trajectory
+  const trajectoryDays = Array.from(new Set(hourlyData.map(d => d.label.split(" ")[0])));
+  const displayTrajectory = selectedTrajectoryDay
+    ? hourlyData.filter(d => d.label.startsWith(selectedTrajectoryDay))
+    : hourlyData.filter((_, i) => i % 6 === 0);
 
   return (
     <div className="space-y-6">
@@ -326,19 +333,36 @@ export default function ForecastingPage() {
 
         {/* Price Trajectory from hourly forecast */}
         <div className="glass rounded-xl p-6">
-          <h3 className="font-display font-semibold text-white mb-4">7-Day Price Trajectory</h3>
+          <div className="flex items-center justify-between mb-4">
+            <h3 className="font-display font-semibold text-white">7-Day Price Trajectory</h3>
+            <div className="flex gap-1 overflow-x-auto pb-1">
+              <button 
+                onClick={() => setSelectedTrajectoryDay(null)}
+                className={`px-2.5 py-1 rounded text-xs font-medium transition-colors whitespace-nowrap ${selectedTrajectoryDay === null ? "bg-brand-500 text-white" : "bg-white/5 text-slate-400 hover:bg-white/10"}`}>
+                7 Days
+              </button>
+              {trajectoryDays.map(day => (
+                <button
+                  key={day}
+                  onClick={() => setSelectedTrajectoryDay(day)}
+                  className={`px-2.5 py-1 rounded text-xs font-medium transition-colors whitespace-nowrap ${selectedTrajectoryDay === day ? "bg-brand-500 text-white" : "bg-white/5 text-slate-400 hover:bg-white/10"}`}>
+                  {day}
+                </button>
+              ))}
+            </div>
+          </div>
           {loading
             ? <Skeleton className="h-52" />
             : (
               <ResponsiveContainer width="100%" height={200}>
-                <LineChart data={hourlyData.filter((_, i) => i % 6 === 0)}>
+                <LineChart data={displayTrajectory}>
                   <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.04)" />
-                  <XAxis dataKey="label" tick={{ fontSize: 9 }} interval={3} />
+                  <XAxis dataKey="label" tick={{ fontSize: 9 }} interval={selectedTrajectoryDay ? 1 : 3} />
                   <YAxis domain={[60, 85]} tick={{ fontSize: 10 }} />
                   <Tooltip content={<ChartTooltip />} />
                   <ReferenceLine y={65}    stroke="#10b981" strokeDasharray="3 3" label={{ value: "₹65",    fill: "#10b981", fontSize: 9 }} />
                   <ReferenceLine y={81.25} stroke="#ef4444" strokeDasharray="3 3" label={{ value: "₹81.25", fill: "#ef4444", fontSize: 9 }} />
-                  <Line type="stepAfter" dataKey="price" name="Price (₹)" stroke="#f59e0b" strokeWidth={2.5} dot={false} />
+                  <Line type="stepAfter" dataKey="price" name="Price (₹)" stroke="#f59e0b" strokeWidth={2.5} dot={selectedTrajectoryDay !== null} />
                 </LineChart>
               </ResponsiveContainer>
             )}
