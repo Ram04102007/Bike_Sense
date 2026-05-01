@@ -5,7 +5,7 @@ import { usePathname } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   Home, Search, Bike, MapPin, Gift, TrendingUp,
-  User, Bell, Menu, X, ChevronRight, Zap
+  User, Bell, Menu, X, ChevronRight, Zap, LogOut
 } from "lucide-react";
 
 const CLERK_KEY = process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY;
@@ -111,6 +111,10 @@ export default function ConsumerLayout({ children }: { children: React.ReactNode
               <span className="absolute top-1 right-1 w-2 h-2 bg-emerald-500 rounded-full" />
             </button>
             <SafeUserButton />
+            <Link href="/" className="p-2 text-slate-400 hover:text-white hover:bg-white/5 rounded-full transition-all flex items-center gap-2 text-sm">
+              <LogOut className="w-4 h-4" />
+              <span className="hidden sm:inline">Sign Out</span>
+            </Link>
           </div>
         </header>
 

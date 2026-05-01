@@ -6,7 +6,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import {
   LayoutDashboard, TrendingUp, DollarSign, Bike, Map, Users,
   FileBarChart2, Settings, Menu, X, ChevronRight, Bell, Search,
-  Zap, User
+  Zap, User, LogOut
 } from "lucide-react";
 
 const CLERK_KEY = process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY;
@@ -147,6 +147,10 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
 
           <div className="ml-auto flex items-center gap-3">
             <SafeUserButton />
+            <Link href="/" className="p-2 text-slate-400 hover:text-white hover:bg-white/5 rounded-full transition-all flex items-center gap-2 text-sm">
+              <LogOut className="w-4 h-4" />
+              <span className="hidden sm:inline">Sign Out</span>
+            </Link>
           </div>
         </header>
 
