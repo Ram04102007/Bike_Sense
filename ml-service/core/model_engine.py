@@ -332,16 +332,19 @@ class ModelEngine:
         res = []
         COMBO_SCALE = 48
         for i, (idx, v) in enumerate(self._fc_short["mean"].items()):
-            demand = float(v) / COMBO_SCALE
-            surge = self.compute_surge(demand)
+            raw_demand = float(v)
+            surge = self.compute_surge(raw_demand)
             price = round(BASE_PRICE * surge, 2)
-            lower = float(self._fc_short["ci"].iloc[i, 0]) / COMBO_SCALE
-            upper = float(self._fc_short["ci"].iloc[i, 1]) / COMBO_SCALE
+            
+            scaled_demand = raw_demand / COMBO_SCALE
+            scaled_lower = float(self._fc_short["ci"].iloc[i, 0]) / COMBO_SCALE
+            scaled_upper = float(self._fc_short["ci"].iloc[i, 1]) / COMBO_SCALE
+            
             res.append({
                 "dt": str(idx), 
-                "demand": round(demand, 1),
-                "lower": round(max(0, lower), 1),
-                "upper": round(upper, 1),
+                "demand": round(scaled_demand, 1),
+                "lower": round(max(0, scaled_lower), 1),
+                "upper": round(scaled_upper, 1),
                 "price": price,
                 "surge_multiplier": surge
             })
