@@ -586,8 +586,8 @@ class ModelEngine:
                         "Marathahalli":1.0,"HSR Layout":1.15,"Jayanagar":0.9,
                         "Electronic City":0.95,"Hebbal":0.85}
         total_w = sum(area_weights.values())
-        
-        total_rides = int(df30["cnt"].sum())
+        COMBO_SCALE = 48
+        total_rides = int(df30["cnt"].sum() / COMBO_SCALE)
         
         res = []
         for area, w in area_weights.items():
