@@ -100,11 +100,7 @@ export default function ConsumerLayout({ children }: { children: React.ReactNode
           <button onClick={()=>setMobileOpen(true)} className="lg:hidden text-slate-400 hover:text-white">
             <Menu className="w-5 h-5" />
           </button>
-          <div className="flex-1 max-w-md relative">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-500" />
-            <input type="text" placeholder="Search areas, bike types..."
-              className="input-dark w-full pl-9 py-1.5 text-sm" />
-          </div>
+          <div className="flex-1"></div>
           <div className="ml-auto flex items-center gap-3">
             <button className="relative p-2 text-slate-400 hover:text-white">
               <Bell className="w-4 h-4" />
