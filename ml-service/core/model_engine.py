@@ -233,6 +233,32 @@ class ModelEngine:
         today    = pd.Timestamp.now().normalize()
         delta    = (query_dt.normalize()-today).days
 
+        # ── Area-specific demand multipliers (realistic Bangalore zones) ────────
+        # High-demand commercial zones command premium prices due to congestion
+        AREA_WEIGHTS = {
+            "Indiranagar":    1.30,  # Premium — pubs, cafes, high footfall
+            "Koramangala":    1.22,  # High — tech offices + nightlife
+            "Whitefield":     1.12,  # Moderate-high — IT corridor
+            "Marathahalli":   1.08,  # Moderate — mix of offices & residential
+            "HSR Layout":     1.15,  # Moderate-high — startup hub
+            "Jayanagar":      0.92,  # Below avg — residential, quieter
+            "Electronic City":0.96,  # Moderate — industrial, predictable
+            "Hebbal":         0.87,  # Low — peripheral, less traffic
+        }
+        area_w = AREA_WEIGHTS.get(location, 1.0)
+
+        # ── Bike model base prices (realistic Bangalore rental market) ──────────
+        MODEL_BASE_PRICES = {
+            "Ather 450X":    81,   # Premium EV
+            "Bounce Infinity": 69, # Mid-tier EV
+            "Yulu Move":     45,   # Budget EV
+            "Rapido Bike":   38,   # Budget ICE
+            "Royal Enfield": 120,  # Premium ICE
+            "Honda Activa":  55,   # Standard scooter
+        }
+        model_base = MODEL_BASE_PRICES.get(bike_model, BASE_PRICE)
+
+
         if delta <= 7 and query_dt in self._fc_short["mean"].index:
             base_agg = float(self._fc_short["mean"][query_dt])
             ci       = (float(self._fc_short["ci"].iloc[self._fc_short["idx"].get_loc(query_dt),0]),
@@ -257,8 +283,10 @@ class ModelEngine:
             base_agg = max(0, (d_dem / 24.0) * norm)
             ci = (max(0, base_agg*0.80), base_agg*1.20)
 
-        surge  = self.compute_surge(base_agg, date)
-        price  = round(BASE_PRICE * surge, 2)
+        surge       = self.compute_surge(base_agg, date)
+        # Apply area weight on top of city-wide surge to differentiate zones
+        area_surge  = round(min(surge * area_w, 2.0), 4)  # cap at 2x
+        price       = round(model_base * area_surge, 2)
         labels = {1.00:"Standard",1.08:"Moderate",1.17:"High",1.25:"Peak Surge"}
 
         # Demand level string
@@ -313,19 +341,20 @@ class ModelEngine:
                 alt_price = min_price
 
         return {
-            "datetime":      query_dt.strftime("%A, %d %B %Y %H:%M"),
-            "location":      location,
-            "bike_model":    bike_model,
+            "datetime":        query_dt.strftime("%A, %d %B %Y %H:%M"),
+            "location":        location,
+            "bike_model":      bike_model,
             "expected_demand": round(float(base_agg), 1),
             "confidence_interval": [round(ci[0],1), round(ci[1],1)],
-            "demand_level":  demand_level,
-            "surge_multiplier": surge,
-            "base_price":    BASE_PRICE,
+            "demand_level":    demand_level,
+            "surge_multiplier": area_surge,
+            "base_price":      model_base,
             "predicted_price": price,
-            "price_label":   labels.get(surge, "Standard"),
-            "savings_vs_peak": round(81.25 - price, 2),
-            "alt_time":      alt_time,
-            "alt_price":     alt_price,
+            "price_label":     labels.get(surge, "Standard"),
+            "savings_vs_peak": round(model_base * 1.25 * area_w - price, 2),
+            "alt_time":        alt_time,
+            "alt_price":       round(model_base * area_w, 2),
+            "area_weight":     area_w,
         }
 
     # ─── Forecast Series for Charts ──────────────────────────────────────────

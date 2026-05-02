@@ -110,13 +110,13 @@ export default function AdminDashboard() {
   // KPI cards derived from real revenue data
   const kpis = revenue
     ? [
-        { title: "Total Rides (Month)", value: revenue.monthly_rides.toLocaleString(), change: 8.4, icon: Bike, color: "#6366f1", sub: "↑ vs last month" },
-        { title: "Revenue (Month)", value: `₹${revenue.monthly_revenue.toFixed(1)}L`, change: 12.1, icon: DollarSign, color: "#00f5ff", sub: "Gross revenue" },
-        { title: "Active Bikes", value: revenue.active_bikes.toString(), change: 3.2, icon: Activity, color: "#00ff88", sub: `${revenue.occupancy_pct}% occupancy` },
-        { title: "Repeat Customers", value: `${revenue.repeat_rate}%`, change: 2.1, icon: Users, color: "#f59e0b", sub: "Retention rate" },
-        { title: "Avg Price / Ride", value: `₹${revenue.avg_price.toFixed(2)}`, change: -1.3, icon: Clock, color: "#a78bfa", sub: "Per booking" },
-        { title: "Peak Hour", value: `${revenue.peak_hour.toString().padStart(2, "0")}:00`, change: 5.7, icon: BarChart2, color: "#fb7185", sub: "Highest demand" },
-      ]
+      { title: "Total Rides (Month)", value: revenue.monthly_rides.toLocaleString(), change: 8.4, icon: Bike, color: "#6366f1", sub: "↑ vs last month" },
+      { title: "Revenue (Month)", value: `₹${revenue.monthly_revenue.toFixed(1)}L`, change: 12.1, icon: DollarSign, color: "#00f5ff", sub: "Gross revenue" },
+      { title: "Active Bikes", value: revenue.active_bikes.toString(), change: 3.2, icon: Activity, color: "#00ff88", sub: `${revenue.occupancy_pct}% occupancy` },
+      { title: "Repeat Customers", value: `${revenue.repeat_rate}%`, change: 2.1, icon: Users, color: "#f59e0b", sub: "Retention rate" },
+      { title: "Avg Price / Ride", value: `₹${revenue.avg_price.toFixed(2)}`, change: -1.3, icon: Clock, color: "#a78bfa", sub: "Per booking" },
+      { title: "Peak Hour", value: `${revenue.peak_hour.toString().padStart(2, "0")}:00`, change: 5.7, icon: BarChart2, color: "#fb7185", sub: "Highest demand" },
+    ]
     : [];
 
   return (
@@ -165,23 +165,23 @@ export default function AdminDashboard() {
         {loading
           ? Array.from({ length: 6 }).map((_, i) => <Skeleton key={i} className="h-28" />)
           : kpis.map((k, i) => (
-              <motion.div key={k.title} initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }}
-                transition={{ delay: i * 0.07 }} className="glass rounded-xl p-4 hover-lift">
-                <div className="flex items-center justify-between mb-3">
-                  <div className="w-8 h-8 rounded-lg flex items-center justify-center"
-                    style={{ background: `${k.color}15`, border: `1px solid ${k.color}25` }}>
-                    <k.icon className="w-4 h-4" style={{ color: k.color }} />
-                  </div>
-                  <span className={`text-xs font-medium ${k.change >= 0 ? "text-emerald-400" : "text-red-400"}`}>
-                    {k.change >= 0 ? <TrendingUp className="inline w-3 h-3" /> : <TrendingDown className="inline w-3 h-3" />}
-                    {" "}{Math.abs(k.change)}%
-                  </span>
+            <motion.div key={k.title} initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: i * 0.07 }} className="glass rounded-xl p-4 hover-lift">
+              <div className="flex items-center justify-between mb-3">
+                <div className="w-8 h-8 rounded-lg flex items-center justify-center"
+                  style={{ background: `${k.color}15`, border: `1px solid ${k.color}25` }}>
+                  <k.icon className="w-4 h-4" style={{ color: k.color }} />
                 </div>
-                <div className="text-xl font-display font-bold text-white leading-tight">{k.value}</div>
-                <div className="text-xs text-slate-500 mt-1">{k.title}</div>
-                {k.sub && <div className="text-xs text-slate-600 mt-0.5">{k.sub}</div>}
-              </motion.div>
-            ))}
+                <span className={`text-xs font-medium ${k.change >= 0 ? "text-emerald-400" : "text-red-400"}`}>
+                  {k.change >= 0 ? <TrendingUp className="inline w-3 h-3" /> : <TrendingDown className="inline w-3 h-3" />}
+                  {" "}{Math.abs(k.change)}%
+                </span>
+              </div>
+              <div className="text-xl font-display font-bold text-white leading-tight">{k.value}</div>
+              <div className="text-xs text-slate-500 mt-1">{k.title}</div>
+              {k.sub && <div className="text-xs text-slate-600 mt-0.5">{k.sub}</div>}
+            </motion.div>
+          ))}
       </div>
 
       {/* Charts Row */}
@@ -202,11 +202,11 @@ export default function AdminDashboard() {
                 <BarChart data={weeklyData} barGap={4}>
                   <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.04)" />
                   <XAxis dataKey="day" tick={{ fontSize: 11 }} />
-                  <YAxis yAxisId="left"  tick={{ fontSize: 11 }} />
+                  <YAxis yAxisId="left" tick={{ fontSize: 11 }} />
                   <YAxis yAxisId="right" orientation="right" tick={{ fontSize: 11 }} />
                   <Tooltip content={<ChartTooltip />} />
                   <Legend wrapperStyle={{ fontSize: "11px" }} />
-                  <Bar yAxisId="left"  dataKey="demand"  name="Demand"  fill="#6366f1" radius={[4, 4, 0, 0]} />
+                  <Bar yAxisId="left" dataKey="demand" name="Demand" fill="#6366f1" radius={[4, 4, 0, 0]} />
                   <Bar yAxisId="right" dataKey="revenue" name="Revenue" fill="#00f5ff" radius={[4, 4, 0, 0]} opacity={0.7} />
                 </BarChart>
               </ResponsiveContainer>
@@ -261,7 +261,7 @@ export default function AdminDashboard() {
                 <AreaChart data={weeklyData}>
                   <defs>
                     <linearGradient id="revGrad" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="5%"  stopColor="#00f5ff" stopOpacity={0.2} />
+                      <stop offset="5%" stopColor="#00f5ff" stopOpacity={0.2} />
                       <stop offset="95%" stopColor="#00f5ff" stopOpacity={0} />
                     </linearGradient>
                   </defs>
@@ -286,36 +286,33 @@ export default function AdminDashboard() {
           </div>
           <div className="space-y-3">
             {alerts.map((a: any, i: number) => {
-              const isCritical  = a.type === "critical";
+              const isCritical = a.type === "critical";
               const isRebalance = a.type === "rebalance";
-              const isInfo      = a.type === "info";
+              const isInfo = a.type === "info";
               return (
                 <motion.div
                   key={i}
                   initial={{ opacity: 0, x: -10 }}
                   animate={{ opacity: 1, x: 0 }}
                   transition={{ delay: i * 0.1 }}
-                  className={`rounded-xl p-3 border ${
-                    isCritical  ? "bg-red-500/8 border-red-500/20"
-                    : isRebalance ? "bg-amber-500/8 border-amber-500/20"
-                    : "bg-blue-500/8 border-blue-500/20"
-                  }`}
+                  className={`rounded-xl p-3 border ${isCritical ? "bg-red-500/8 border-red-500/20"
+                      : isRebalance ? "bg-amber-500/8 border-amber-500/20"
+                        : "bg-blue-500/8 border-blue-500/20"
+                    }`}
                 >
                   <div className="flex gap-3 items-start">
-                    <div className={`mt-0.5 shrink-0 w-7 h-7 rounded-lg flex items-center justify-center ${
-                      isCritical  ? "bg-red-500/15"
-                      : isRebalance ? "bg-amber-500/15"
-                      : "bg-blue-500/15"
-                    }`}>
-                      {isCritical  && <AlertTriangle className="w-4 h-4 text-red-400" />}
+                    <div className={`mt-0.5 shrink-0 w-7 h-7 rounded-lg flex items-center justify-center ${isCritical ? "bg-red-500/15"
+                        : isRebalance ? "bg-amber-500/15"
+                          : "bg-blue-500/15"
+                      }`}>
+                      {isCritical && <AlertTriangle className="w-4 h-4 text-red-400" />}
                       {isRebalance && <RefreshCw className="w-4 h-4 text-amber-400" />}
-                      {isInfo      && <Activity className="w-4 h-4 text-blue-400" />}
+                      {isInfo && <Activity className="w-4 h-4 text-blue-400" />}
                     </div>
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center justify-between gap-2 mb-0.5">
-                        <p className={`text-xs font-semibold ${
-                          isCritical ? "text-red-300" : isRebalance ? "text-amber-300" : "text-blue-300"
-                        }`}>{a.title}</p>
+                        <p className={`text-xs font-semibold ${isCritical ? "text-red-300" : isRebalance ? "text-amber-300" : "text-blue-300"
+                          }`}>{a.title}</p>
                         <p className="text-[10px] text-slate-600 shrink-0">{a.time}</p>
                       </div>
                       <p className="text-xs text-slate-300 leading-relaxed">{a.msg}</p>

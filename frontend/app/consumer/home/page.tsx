@@ -66,19 +66,17 @@ function PricePredictor({ stdPrice, selectedArea, onAreaChange }: { stdPrice: nu
     try {
       const date = form.date || new Date().toISOString().split("T")[0];
       const res = await predictDemand({ date, time: form.time, location: selectedArea, bike_model: form.model });
-      const baseP  = BASE_PRICES[form.model] ?? 65;
-      const scaled = parseFloat((baseP * res.surge_multiplier).toFixed(2));
-      setIsLive(res.expected_demand % 10 !== 0);
+      // Use backend-computed price directly — it already applies area weight + model base + surge
       setIsLive(res.expected_demand % 10 !== 0);
 
       setResult({
-        price:   scaled,
+        price:   res.predicted_price,
         surge:   res.surge_multiplier,
         label:   res.price_label,
         demand:  res.demand_level,
-        saving:  parseFloat((baseP * 1.25 - scaled).toFixed(2)),
+        saving:  res.savings_vs_peak > 0 ? res.savings_vs_peak : 0,
         altTime: res.surge_multiplier > 1.0 ? res.alt_time : null,
-        altPrice: baseP,
+        altPrice: res.alt_price ?? res.base_price,
       });
     } catch {
       setError("Prediction failed. Check your connection.");

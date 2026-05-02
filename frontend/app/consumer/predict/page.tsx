@@ -93,13 +93,12 @@ export default function PredictorPage() {
       const date = form.date || new Date().toISOString().split("T")[0];
       const res = await predictDemand({ date, time: form.time, location: form.area, bike_model: form.model });
 
-      const baseP  = BASE_PRICES[form.model] ?? 65;
-      const scaled = parseFloat((baseP * res.surge_multiplier).toFixed(2));
+      // Use backend-computed prices directly — backend now applies area weight + model base + SARIMA surge
       const enriched: PredictionResult = {
         ...res,
-        predicted_price: scaled,
-        base_price:      baseP,
-        savings_vs_peak: parseFloat((baseP * 1.25 - scaled).toFixed(2)),
+        predicted_price: res.predicted_price,
+        base_price:      res.base_price,
+        savings_vs_peak: res.savings_vs_peak > 0 ? res.savings_vs_peak : 0,
       };
 
       setIsLive(res.expected_demand % 10 !== 0);
