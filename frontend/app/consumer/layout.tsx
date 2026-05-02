@@ -1,23 +1,14 @@
 "use client";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   Home, Search, Bike, MapPin, Gift, TrendingUp,
   User, Bell, Menu, X, ChevronRight, Zap, LogOut
 } from "lucide-react";
+import { getUser, signOut as authSignOut, type AuthUser } from "@/lib/auth";
 
-const CLERK_KEY = process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY;
-const hasClerk = !!(CLERK_KEY && CLERK_KEY.startsWith("pk_"));
-
-function SafeUserButton() {
-  return (
-    <div className="w-8 h-8 rounded-full bg-emerald-500/20 border border-emerald-500/30 flex items-center justify-center">
-      <User className="w-4 h-4 text-emerald-400" />
-    </div>
-  );
-}
 
 const navItems = [
   { href:"/consumer/home",        label:"Home",          icon:Home },
@@ -28,7 +19,29 @@ const navItems = [
 
 export default function ConsumerLayout({ children }: { children: React.ReactNode }) {
   const [mobileOpen, setMobileOpen] = useState(false);
+  const [currentUser, setCurrentUser] = useState<AuthUser | null>(null);
   const pathname = usePathname();
+  const router   = useRouter();
+
+  // ── Auth guard ──────────────────────────────────────────────────
+  useEffect(() => {
+    const user = getUser();
+    if (!user) {
+      router.replace("/auth/login");
+      return;
+    }
+    if (user.role !== "consumer") {
+      router.replace("/admin/dashboard");
+      return;
+    }
+    setCurrentUser(user);
+  }, [router]);
+
+  const handleSignOut = () => {
+    authSignOut();
+    router.push("/auth/login");
+  };
+
 
   const Sidebar = ({ mobile=false }) => (
     <div className="h-full flex flex-col">
@@ -102,11 +115,19 @@ export default function ConsumerLayout({ children }: { children: React.ReactNode
           </button>
           <div className="flex-1"></div>
           <div className="ml-auto flex items-center gap-3">
-            <SafeUserButton />
-            <Link href="/" className="p-2 text-slate-400 hover:text-white hover:bg-white/5 rounded-full transition-all flex items-center gap-2 text-sm">
+            <div className="flex items-center gap-2 glass-light rounded-lg px-3 py-1.5">
+              <div className="w-6 h-6 rounded-full bg-emerald-500/20 border border-emerald-500/30 flex items-center justify-center">
+                <User className="w-3 h-3 text-emerald-400" />
+              </div>
+              <span className="text-xs text-slate-300 hidden sm:inline">
+                {currentUser ? `${currentUser.firstName} ${currentUser.lastName}` : "Rider"}
+              </span>
+            </div>
+            <button onClick={handleSignOut}
+              className="p-2 text-slate-400 hover:text-white hover:bg-white/5 rounded-lg transition-all flex items-center gap-2 text-sm">
               <LogOut className="w-4 h-4" />
               <span className="hidden sm:inline">Sign Out</span>
-            </Link>
+            </button>
           </div>
         </header>
 
