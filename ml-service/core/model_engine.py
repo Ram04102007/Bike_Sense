@@ -116,7 +116,13 @@ class ModelEngine:
                     b = 12*hour_factor*aw*mw*seasonal*(1.1 if is_weekend else 1.0)*wf*event_mult
                     total += max(1,int(np.random.poisson(max(0.5,b))))
             temp = round(22+8*np.sin(2*np.pi*(dt.month-1)/12)+np.random.randn()*2,1)
+            # Total inventory in the city across all models is roughly 150-200
+            # Higher 'total' (demand) means fewer 'available' bikes
+            city_inventory = 180 + np.random.randint(-10, 10)
+            available = max(5, city_inventory - total)
+            
             records.append({"dteday":dt.date(),"hr":hr,"datetime":dt,"cnt":total,
+                           "available_bikes": available,
                            "temp":temp,"hum":round(60+20*np.sin(2*np.pi*(dt.month-5)/12)+np.random.randn()*5,1),
                            "windspeed":round(abs(np.random.randn()*8),1),
                            "traffic_factor":round(0.6+0.4*min(hour_factor/3,1)+np.random.uniform(-0.05,0.05),2),

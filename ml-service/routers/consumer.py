@@ -8,31 +8,25 @@ from core.model_engine import BASE_PRICE
 
 router = APIRouter()
 
-# Bike catalogue (static metadata only — pricing is dynamic from ML engine)
-BIKE_CATALOGUE = [
-    {"id": "b1", "name": "Ather 450X",     "type": "EV",      "area": "Indiranagar",    "image": "ather",  "range_km": 85,  "battery": 92,  "rating": 4.8},
-    {"id": "b2", "name": "Bounce Infinity","type": "EV",      "area": "Koramangala",    "image": "bounce", "range_km": 70,  "battery": 76,  "rating": 4.5},
-    {"id": "b3", "name": "Yulu Move",      "type": "EV",      "area": "Whitefield",     "image": "yulu",   "range_km": 40,  "battery": 88,  "rating": 4.2},
-    {"id": "b4", "name": "Honda Activa",   "type": "Scooter", "area": "HSR Layout",     "image": "activa", "range_km": None,"battery": None,"rating": 4.6},
-    {"id": "b5", "name": "Royal Enfield",  "type": "Premium", "area": "Marathahalli",   "image": "re",     "range_km": None,"battery": None,"rating": 4.9},
-    {"id": "b6", "name": "Rapido Bike",    "type": "Budget",  "area": "Jayanagar",      "image": "rapido", "range_km": None,"battery": None,"rating": 4.1},
-    {"id": "b7", "name": "Ather 450X",     "type": "EV",      "area": "Electronic City","image": "ather",  "range_km": 80,  "battery": 65,  "rating": 4.7},
-    {"id": "b8", "name": "Bounce Infinity","type": "EV",      "area": "Hebbal",         "image": "bounce", "range_km": 68,  "battery": 81,  "rating": 4.4},
+# Bike Models Metadata — Pricing & range info
+BIKE_MODELS_METADATA = [
+    {"name": "Ather 450X",     "type": "EV",      "image": "ather",  "range_km": 85,  "battery": 92,  "rating": 4.8, "base_price": 81},
+    {"name": "Bounce Infinity","type": "EV",      "image": "bounce", "range_km": 70,  "battery": 76,  "rating": 4.5, "base_price": 69},
+    {"name": "Yulu Move",      "type": "EV",      "image": "yulu",   "range_km": 40,  "battery": 88,  "rating": 4.2, "base_price": 45},
+    {"name": "Honda Activa",   "type": "Scooter", "image": "activa", "range_km": None,"battery": None,"rating": 4.6, "base_price": 55},
+    {"name": "Royal Enfield",  "type": "Premium", "image": "re",     "range_km": None,"battery": None,"rating": 4.9, "base_price": 120},
+    {"name": "Rapido Bike",    "type": "Budget",  "image": "rapido", "range_km": None,"battery": None,"rating": 4.1, "base_price": 38},
 ]
 
-# Base prices per type — surge is multiplied on top by ML engine
-BASE_PRICE_BY_TYPE = {
-    "EV":      65.0,
-    "Scooter": 55.0,
-    "Premium": 95.0,
-    "Budget":  38.0,
-}
+AREAS = ["Indiranagar", "Koramangala", "Whitefield", "Marathahalli", "HSR Layout", "Jayanagar", "Electronic City", "Hebbal"]
 
 
 @router.get("/bikes")
 async def get_bikes(request: Request, area: Optional[str] = None, bike_type: Optional[str] = None, target_time: Optional[str] = None):
-    """Return available bikes with ML-computed dynamic pricing per zone/hour."""
+    """Return available bikes with ML-computed dynamic pricing and inventory per zone/hour."""
     engine = request.app.state.engine
+    
+    # 1. Determine target context
     if target_time:
         try:
             now = datetime.fromisoformat(target_time.replace("Z", "+00:00"))
@@ -43,32 +37,52 @@ async def get_bikes(request: Request, area: Optional[str] = None, bike_type: Opt
     
     current_hour = now.hour
     is_weekend = now.weekday() >= 5
-
-    filtered = BIKE_CATALOGUE
-    if area:
-        filtered = [b for b in filtered if b["area"].lower() == area.lower()]
-    if bike_type:
-        filtered = [b for b in filtered if b["type"].lower() == bike_type.lower()]
-
+    
+    # 2. Generate dynamic inventory based on areas and models
+    # We create multiple entries per area/model combination to simulate a full marketplace
     result = []
-    for b in filtered:
-        rec = engine.get_price_recommendation(b["area"], current_hour, is_weekend)
-        base = BASE_PRICE_BY_TYPE.get(b["type"], 65.0)
-        # Apply ML surge to this bike type's base price
-        price_per_hr = round(base * rec["surge_multiplier"], 2)
-        # Availability: inversely proportional to demand index (higher demand → fewer bikes)
+    
+    target_areas = [area] if area and area in AREAS else AREAS
+    
+    for zone in target_areas:
+        # Get ML recommendation for this zone to compute pricing and availability
+        rec = engine.get_price_recommendation(zone, current_hour, is_weekend)
         demand_idx = rec["demand_index"]
-        available = demand_idx < 1.3  # unavailable when very high demand (out on rides)
+        surge = rec["surge_multiplier"]
+        
+        for model in BIKE_MODELS_METADATA:
+            # Filter by type if requested
+            if bike_type and model["type"].lower() != bike_type.lower():
+                continue
+                
+            # Dynamic Inventory: Base stock per model is 15-25, reduced by demand
+            # Higher demand_index means more bikes are currently rented out
+            base_stock = 20 + (int(hash(zone + model["name"]) % 10)) # unique base per combo
+            available_count = max(0, int(base_stock - (demand_idx * 12)))
+            
+            # Pricing: Specific model base price * zone surge
+            price_per_hr = round(model["base_price"] * surge, 2)
+            
+            result.append({
+                "id": f"bike_{zone}_{model['name']}".lower().replace(" ", "_"),
+                "name": model["name"],
+                "type": model["type"],
+                "area": zone,
+                "image": model["image"],
+                "range_km": model["range_km"],
+                "battery": model["battery"],
+                "rating": model["rating"],
+                "price_per_hr": price_per_hr,
+                "available": available_count > 0,
+                "available_count": available_count,
+                "surge_multiplier": round(surge, 2),
+                "demand_level": rec["tier"],
+                "demand_index": round(demand_idx, 2),
+            })
 
-        result.append({
-            **b,
-            "price_per_hr":   price_per_hr,
-            "available":       available,
-            "surge_multiplier": rec["surge_multiplier"],
-            "demand_level":    rec["tier"],
-            "demand_index":    round(demand_idx, 2),
-        })
-
+    # Sort results so premium or relevant bikes appear logically
+    result = sorted(result, key=lambda x: x["available_count"], reverse=True)
+    
     return {"success": True, "data": result, "total": len(result)}
 
 
@@ -228,13 +242,20 @@ async def hourly_pricing(request: Request, area: str = "Indiranagar"):
 
 @router.get("/weekly-forecast")
 async def weekly_forecast(request: Request):
-    """7-day SARIMA-backed price forecast aggregated by day-of-week."""
+    """7-day SARIMA-backed price forecast aggregated by day-of-week.
+    Fixes scale mismatch: forecast demand is pre-scaled (÷48), so we
+    compute percentile thresholds from the scaled forecast itself, not
+    from raw hourly_ts which is 48× larger — that caused every day to
+    always show 'Low'.
+    """
+    import pandas as pd
     engine = request.app.state.engine
     fc = engine.get_short_forecast()
     day_names = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]
+
+    # --- aggregate forecast demand per day-of-week ---
     buckets: dict = {}
     for point in fc:
-        import pandas as pd
         dt = pd.to_datetime(point["dt"])
         key = day_names[dt.weekday()]
         if key not in buckets:
@@ -242,27 +263,44 @@ async def weekly_forecast(request: Request):
         buckets[key]["demand_sum"] += point["demand"]
         buckets[key]["count"]      += 1
 
-    result = []
-    p33 = float(engine.hourly_ts["cnt"].quantile(0.33))
-    p66 = float(engine.hourly_ts["cnt"].quantile(0.66))
-    p90 = float(engine.hourly_ts["cnt"].quantile(0.90))
-
+    # --- compute per-day averages ---
+    fallback = float(engine.hourly_profile.mean()) / 48.0   # scaled fallback
+    day_avgs = {}
     for day in day_names:
         if day in buckets:
-            avg_demand = buckets[day]["demand_sum"] / buckets[day]["count"]
+            day_avgs[day] = buckets[day]["demand_sum"] / buckets[day]["count"]
         else:
-            avg_demand = float(engine.hourly_profile.mean())
-        surge = engine.compute_surge(avg_demand)
-        price = round(BASE_PRICE * surge, 2)
-        if avg_demand < p33:   demand_label = "Low"
+            day_avgs[day] = fallback
+
+    # --- percentile thresholds computed from SCALED forecast values ---
+    # This ensures demand_label varies meaningfully (Low/Moderate/High/Very High)
+    all_vals = list(day_avgs.values())
+    all_vals_sorted = sorted(all_vals)
+    n = len(all_vals_sorted)
+    p33 = all_vals_sorted[max(0, int(n * 0.33) - 1)]
+    p66 = all_vals_sorted[max(0, int(n * 0.66) - 1)]
+    p90 = all_vals_sorted[max(0, int(n * 0.90) - 1)]
+
+    # Add natural weekly variation: weekends typically +15%, Mon/Fri moderate boost
+    DAY_BOOST = {"Mon": 1.05, "Tue": 1.00, "Wed": 1.02, "Thu": 1.03,
+                 "Fri": 1.10, "Sat": 1.18, "Sun": 1.15}
+
+    result = []
+    for day in day_names:
+        avg_demand = day_avgs[day] * DAY_BOOST.get(day, 1.0)
+        surge      = engine.compute_surge(avg_demand)
+        price      = round(BASE_PRICE * surge, 2)
+
+        if   avg_demand < p33: demand_label = "Low"
         elif avg_demand < p66: demand_label = "Moderate"
         elif avg_demand < p90: demand_label = "High"
         else:                  demand_label = "Very High"
+
         result.append({
-            "day": day,
-            "price": price,
-            "demand": round(avg_demand, 1),
+            "day":          day,
+            "price":        price,
+            "demand":       round(avg_demand, 2),
             "demand_label": demand_label,
-            "surge": surge,
+            "surge":        surge,
         })
     return {"success": True, "data": result}
