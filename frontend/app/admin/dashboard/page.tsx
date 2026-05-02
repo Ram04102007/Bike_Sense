@@ -1,15 +1,289 @@
 "use client";
-import { useEffect, useState } from "react";
-import { motion } from "framer-motion";
+import { useEffect, useState, useRef } from "react";
+import { motion, AnimatePresence } from "framer-motion";
 import {
   AreaChart, Area, BarChart, Bar,
   XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend,
 } from "recharts";
 import {
   TrendingUp, TrendingDown, Bike, Users, DollarSign, BarChart2,
-  Activity, AlertTriangle, CheckCircle, Clock, Zap, RefreshCw
+  Activity, AlertTriangle, CheckCircle, Clock, Zap, RefreshCw,
+  UploadCloud, FileText, CheckCircle2, X
 } from "lucide-react";
 import { getAdminRevenue, getShortForecast, getHeatmapData, getLiveAlerts, getZoneIntelligence, type RevenueData, type ForecastPoint } from "@/lib/api";
+import toast from "react-hot-toast";
+
+// ─── Welcome Splash ────────────────────────────────────────────────────────────
+function WelcomeSplash({ onDismiss }: { onDismiss: () => void }) {
+  const [phase, setPhase] = useState<"bike" | "upload">("bike");
+  const [file, setFile] = useState<File | null>(null);
+  const [uploading, setUploading] = useState(false);
+  const [uploaded, setUploaded] = useState(false);
+
+  // Auto-advance from bike animation → upload panel after 3.2s
+  useEffect(() => {
+    const t = setTimeout(() => setPhase("upload"), 3200);
+    return () => clearTimeout(t);
+  }, []);
+
+  const handleUpload = async () => {
+    if (!file) return;
+    setUploading(true);
+    const formData = new FormData();
+    formData.append("file", file);
+    try {
+      const mlBase = process.env.NEXT_PUBLIC_ML_API_URL || "http://localhost:8000";
+      const res = await fetch(`${mlBase}/api/v1/admin/upload-dataset`, { method: "POST", body: formData });
+      const data = await res.json();
+      if (data.success) {
+        setUploaded(true);
+        toast.success("Dataset uploaded! SARIMA models retrained.");
+        setTimeout(onDismiss, 1800);
+      } else {
+        toast.error(data.error || "Upload failed");
+        setUploading(false);
+      }
+    } catch {
+      toast.error("Error communicating with server.");
+      setUploading(false);
+    }
+  };
+
+  return (
+    <motion.div
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      exit={{ opacity: 0 }}
+      transition={{ duration: 0.4 }}
+      className="fixed inset-0 z-50 flex items-center justify-center"
+      style={{ background: "linear-gradient(135deg, #0a0a1a 0%, #0d1117 50%, #050510 100%)" }}
+    >
+      {/* Ambient glow */}
+      <div className="absolute inset-0 overflow-hidden pointer-events-none">
+        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[600px] h-[600px] rounded-full"
+          style={{ background: "radial-gradient(circle, rgba(99,102,241,0.12) 0%, transparent 70%)" }} />
+      </div>
+
+      <AnimatePresence mode="wait">
+        {/* ── Phase 1: Bike Animation ── */}
+        {phase === "bike" && (
+          <motion.div key="bike-phase"
+            initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0, scale: 0.95 }}
+            className="flex flex-col items-center gap-8 select-none"
+          >
+            {/* Title */}
+            <motion.div initial={{ opacity: 0, y: -20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.2 }}
+              className="text-center">
+              <h1 className="text-4xl font-bold text-white mb-1" style={{ fontFamily: "var(--font-display, sans-serif)" }}>
+                Welcome back, <span style={{ color: "#818cf8" }}>Admin</span>
+              </h1>
+              <p className="text-slate-400 text-sm">Loading your Bike-Sense Command Center…</p>
+            </motion.div>
+
+            {/* Bike animation scene */}
+            <div className="relative w-[520px] h-[140px] overflow-hidden">
+              {/* Road */}
+              <div className="absolute bottom-0 left-0 right-0 h-[3px] rounded-full"
+                style={{ background: "linear-gradient(90deg, transparent, rgba(99,102,241,0.4), transparent)" }} />
+              {/* Dashed road markings */}
+              <motion.div
+                animate={{ x: ["0%", "-100%"] }}
+                transition={{ duration: 0.8, repeat: Infinity, ease: "linear" }}
+                className="absolute bottom-[10px] left-0 flex gap-8"
+                style={{ width: "200%" }}
+              >
+                {Array.from({ length: 20 }).map((_, i) => (
+                  <div key={i} className="w-12 h-[2px] rounded-full shrink-0"
+                    style={{ background: "rgba(99,102,241,0.25)" }} />
+                ))}
+              </motion.div>
+
+              {/* Speed lines */}
+              {[20, 45, 65, 80, 100].map((top, i) => (
+                <motion.div key={i}
+                  animate={{ x: ["60%", "-120%"], opacity: [0, 0.5, 0] }}
+                  transition={{ duration: 0.9, delay: i * 0.15, repeat: Infinity, ease: "linear" }}
+                  className="absolute h-[1.5px] rounded-full"
+                  style={{ top: `${top}px`, width: `${40 + i * 12}px`, background: "rgba(99,102,241,0.35)" }}
+                />
+              ))}
+
+              {/* The Bike SVG — rides from left side to center, steady */}
+              <motion.div
+                initial={{ x: -120 }}
+                animate={{ x: 180 }}
+                transition={{ duration: 1.6, ease: [0.25, 0.46, 0.45, 0.94] }}
+                className="absolute bottom-[8px]"
+              >
+                {/* Subtle wheel bounce */}
+                <motion.div
+                  animate={{ y: [0, -3, 0] }}
+                  transition={{ duration: 0.35, repeat: Infinity, ease: "easeInOut" }}
+                >
+                  <svg width="90" height="70" viewBox="0 0 90 70" fill="none" xmlns="http://www.w3.org/2000/svg">
+                    {/* Rear wheel */}
+                    <circle cx="18" cy="50" r="16" stroke="#6366f1" strokeWidth="3" fill="none" />
+                    <circle cx="18" cy="50" r="4" fill="#6366f1" />
+                    {/* Spokes rear */}
+                    {[0,60,120,180,240,300].map((deg, i) => (
+                      <line key={i} x1="18" y1="50"
+                        x2={18 + 12 * Math.cos(deg * Math.PI / 180)}
+                        y2={50 + 12 * Math.sin(deg * Math.PI / 180)}
+                        stroke="#6366f180" strokeWidth="1.2" />
+                    ))}
+                    {/* Front wheel */}
+                    <circle cx="72" cy="50" r="16" stroke="#818cf8" strokeWidth="3" fill="none" />
+                    <circle cx="72" cy="50" r="4" fill="#818cf8" />
+                    {/* Spokes front */}
+                    {[0,60,120,180,240,300].map((deg, i) => (
+                      <line key={i} x1="72" y1="50"
+                        x2={72 + 12 * Math.cos(deg * Math.PI / 180)}
+                        y2={50 + 12 * Math.sin(deg * Math.PI / 180)}
+                        stroke="#818cf880" strokeWidth="1.2" />
+                    ))}
+                    {/* Frame: chainstay & seatstay */}
+                    <line x1="18" y1="50" x2="45" y2="22" stroke="#6366f1" strokeWidth="2.5" strokeLinecap="round" />
+                    <line x1="18" y1="50" x2="45" y2="38" stroke="#6366f1" strokeWidth="2.5" strokeLinecap="round" />
+                    {/* Main frame triangle */}
+                    <polygon points="45,22 45,38 72,50 60,22" fill="#6366f115" stroke="#818cf8" strokeWidth="2" strokeLinejoin="round" />
+                    {/* Fork */}
+                    <line x1="60" y1="22" x2="72" y2="50" stroke="#818cf8" strokeWidth="2.5" strokeLinecap="round" />
+                    {/* Handlebar */}
+                    <line x1="60" y1="22" x2="65" y2="16" stroke="#a5b4fc" strokeWidth="2.5" strokeLinecap="round" />
+                    <line x1="63" y1="13" x2="67" y2="19" stroke="#a5b4fc" strokeWidth="2.5" strokeLinecap="round" />
+                    {/* Seat post */}
+                    <line x1="45" y1="22" x2="45" y2="14" stroke="#a5b4fc" strokeWidth="2.5" strokeLinecap="round" />
+                    {/* Saddle */}
+                    <line x1="40" y1="13" x2="52" y2="13" stroke="#c7d2fe" strokeWidth="3" strokeLinecap="round" />
+                    {/* Rider body */}
+                    <ellipse cx="52" cy="20" rx="8" ry="6" fill="#4f46e530" stroke="#6366f1" strokeWidth="1.5" />
+                    {/* Rider head */}
+                    <circle cx="60" cy="14" r="5" fill="#6366f120" stroke="#818cf8" strokeWidth="1.5" />
+                    {/* Rider arm to handlebar */}
+                    <line x1="57" y1="17" x2="63" y2="14" stroke="#818cf8" strokeWidth="1.5" strokeLinecap="round" />
+                    {/* Headlight glow */}
+                    <circle cx="75" cy="42" r="3" fill="#00f5ff" opacity="0.8" />
+                    <circle cx="75" cy="42" r="6" fill="#00f5ff" opacity="0.15" />
+                  </svg>
+                </motion.div>
+              </motion.div>
+            </div>
+
+            {/* Loading dots */}
+            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.6 }}
+              className="flex gap-2">
+              {[0, 1, 2].map(i => (
+                <motion.div key={i}
+                  animate={{ scale: [1, 1.5, 1], opacity: [0.3, 1, 0.3] }}
+                  transition={{ duration: 0.9, delay: i * 0.2, repeat: Infinity }}
+                  className="w-2 h-2 rounded-full"
+                  style={{ background: "#6366f1" }}
+                />
+              ))}
+            </motion.div>
+          </motion.div>
+        )}
+
+        {/* ── Phase 2: Dataset Upload ── */}
+        {phase === "upload" && (
+          <motion.div key="upload-phase"
+            initial={{ opacity: 0, y: 30 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -20 }}
+            transition={{ duration: 0.5, ease: "easeOut" }}
+            className="w-full max-w-lg mx-4"
+          >
+            {/* Card */}
+            <div className="rounded-2xl border border-white/10 p-8"
+              style={{ background: "rgba(255,255,255,0.04)", backdropFilter: "blur(20px)" }}>
+              
+              {/* Icon + Title */}
+              <div className="flex flex-col items-center text-center mb-8">
+                <div className="w-16 h-16 rounded-2xl flex items-center justify-center mb-4"
+                  style={{ background: "linear-gradient(135deg, #6366f120, #818cf830)", border: "1px solid #6366f130" }}>
+                  <UploadCloud className="w-8 h-8" style={{ color: "#818cf8" }} />
+                </div>
+                <h2 className="text-2xl font-bold text-white mb-2">Upload Your Dataset</h2>
+                <p className="text-slate-400 text-sm leading-relaxed">
+                  Upload a <span className="text-white font-medium">bike_data.csv</span> to dynamically retrain the 
+                  SARIMA models. Your dashboard will instantly reflect the new data.
+                </p>
+              </div>
+
+              {uploaded ? (
+                <motion.div initial={{ scale: 0.8, opacity: 0 }} animate={{ scale: 1, opacity: 1 }}
+                  className="flex flex-col items-center gap-3 py-4">
+                  <CheckCircle2 className="w-12 h-12 text-emerald-400" />
+                  <p className="text-emerald-300 font-semibold">Models retrained! Redirecting…</p>
+                </motion.div>
+              ) : (
+                <>
+                  {/* File picker */}
+                  <div className="relative mb-4">
+                    <input
+                      id="splash-dataset-upload"
+                      type="file"
+                      accept=".csv"
+                      onChange={e => setFile(e.target.files?.[0] || null)}
+                      className="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-10"
+                    />
+                    <div className={`flex items-center gap-3 px-4 py-4 rounded-xl border-2 border-dashed transition-all ${
+                      file
+                        ? "border-indigo-500 bg-indigo-500/10"
+                        : "border-white/15 bg-white/3 hover:border-indigo-500/50"
+                    }`}>
+                      <FileText className={`w-5 h-5 shrink-0 ${file ? "text-indigo-400" : "text-slate-500"}`} />
+                      <span className={`text-sm font-medium truncate ${file ? "text-indigo-300" : "text-slate-400"}`}>
+                        {file ? file.name : "Click to select CSV dataset…"}
+                      </span>
+                    </div>
+                  </div>
+
+                  {/* Actions */}
+                  <div className="flex gap-3">
+                    <button
+                      onClick={handleUpload}
+                      disabled={!file || uploading}
+                      className={`flex-1 py-3 rounded-xl font-semibold text-sm flex items-center justify-center gap-2 transition-all ${
+                        !file || uploading
+                          ? "bg-white/5 text-slate-500 cursor-not-allowed"
+                          : "text-white"
+                      }`}
+                      style={file && !uploading ? {
+                        background: "linear-gradient(135deg, #6366f1, #818cf8)",
+                        boxShadow: "0 4px 20px rgba(99,102,241,0.3)"
+                      } : {}}
+                    >
+                      {uploading ? (
+                        <>
+                          <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                          Retraining ML…
+                        </>
+                      ) : (
+                        <>
+                          <UploadCloud className="w-4 h-4" />
+                          Upload &amp; Train
+                        </>
+                      )}
+                    </button>
+                    <button
+                      onClick={onDismiss}
+                      className="px-4 py-3 rounded-xl text-slate-400 hover:text-white hover:bg-white/8 text-sm font-medium transition-all border border-white/10"
+                    >
+                      Skip
+                    </button>
+                  </div>
+
+                  <p className="text-center text-xs text-slate-600 mt-4">
+                    You can also upload datasets anytime from <span className="text-slate-400">Settings → Custom Dataset Upload</span>
+                  </p>
+                </>
+              )}
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </motion.div>
+  );
+}
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 /** Aggregate hourly SARIMA forecast into 7 daily buckets */
@@ -71,6 +345,16 @@ export default function AdminDashboard() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [lastRefresh, setLastRefresh] = useState<Date | null>(null);
+  // Show splash once per browser session
+  const [showSplash, setShowSplash] = useState(false);
+  useEffect(() => {
+    const seen = sessionStorage.getItem("bs_admin_welcomed");
+    if (!seen) setShowSplash(true);
+  }, []);
+  const dismissSplash = () => {
+    sessionStorage.setItem("bs_admin_welcomed", "1");
+    setShowSplash(false);
+  };
 
   // Live clock
   useEffect(() => {
@@ -120,6 +404,10 @@ export default function AdminDashboard() {
     : [];
 
   return (
+    <>
+      <AnimatePresence>
+        {showSplash && <WelcomeSplash onDismiss={dismissSplash} />}
+      </AnimatePresence>
     <div className="space-y-6">
       {/* Page Header */}
       <div className="flex items-center justify-between">
@@ -391,5 +679,6 @@ export default function AdminDashboard() {
           )}
       </div>
     </div>
+    </>
   );
 }

@@ -1,12 +1,14 @@
 "use client";
 import { useState, useEffect } from "react";
 import { motion } from "framer-motion";
-import { LogOut, User, Database, Moon, Monitor, Shield } from "lucide-react";
+import { LogOut, User, Database, Moon, Monitor, Shield, UploadCloud, FileText } from "lucide-react";
 import toast from "react-hot-toast";
 
 export default function SettingsPage() {
   const [peakSurge, setPeakSurge] = useState(1.25);
   const [eventMultiplier, setEventMultiplier] = useState(1.50);
+  const [file, setFile] = useState<File | null>(null);
+  const [uploading, setUploading] = useState(false);
 
   useEffect(() => {
     const loadConfig = async () => {
@@ -54,6 +56,35 @@ export default function SettingsPage() {
       }
     } catch (err) {
       toast.error("API error while saving settings.");
+    }
+  };
+
+  const handleUpload = async () => {
+    if (!file) return;
+    setUploading(true);
+    const formData = new FormData();
+    formData.append("file", file);
+
+    try {
+      const mlBase = process.env.NEXT_PUBLIC_ML_API_URL || "http://localhost:8000";
+      const res = await fetch(`${mlBase}/api/v1/admin/upload-dataset`, {
+        method: "POST",
+        body: formData,
+      });
+      const data = await res.json();
+      if (data.success) {
+        toast.success("Dataset uploaded! SARIMA models retrained.");
+        setFile(null);
+        // Reset file input value
+        const fileInput = document.getElementById("dataset-upload") as HTMLInputElement;
+        if (fileInput) fileInput.value = "";
+      } else {
+        toast.error(data.error || "Upload failed");
+      }
+    } catch {
+      toast.error("Error communicating with server.");
+    } finally {
+      setUploading(false);
     }
   };
 
@@ -156,6 +187,59 @@ export default function SettingsPage() {
               <button onClick={saveSettings} className="px-4 py-2 bg-brand-600 hover:bg-brand-500 text-white rounded-lg text-sm font-medium transition-colors">
                 Save ML Settings
               </button>
+            </div>
+          </motion.section>
+
+          {/* Custom Dataset Upload */}
+          <motion.section 
+            initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.3 }}
+            className="glass rounded-xl p-6"
+          >
+            <h2 className="flex items-center gap-2 text-lg font-display font-semibold text-white mb-6">
+              <UploadCloud className="w-5 h-5 text-brand-400" />
+              Custom Dataset Upload
+            </h2>
+            
+            <div className="p-4 bg-white/5 rounded-lg border border-white/5">
+              <p className="text-sm text-slate-400 mb-4">
+                Upload your own <span className="text-white font-medium">bike_data.csv</span> to dynamically retrain the SARIMA machine learning models. 
+                The entire dashboard (Pricing, Fleet, Analytics) will instantly update to reflect your custom data!
+              </p>
+              
+              <div className="flex flex-col sm:flex-row items-center gap-4">
+                <div className="relative w-full sm:w-auto flex-1">
+                  <input 
+                    id="dataset-upload"
+                    type="file" 
+                    accept=".csv"
+                    onChange={e => setFile(e.target.files?.[0] || null)}
+                    className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
+                  />
+                  <div className={`flex items-center gap-3 px-4 py-3 rounded-lg border border-dashed transition-colors ${
+                    file ? "border-brand-500 bg-brand-500/10" : "border-white/20 bg-dark-800 hover:border-brand-500/50"
+                  }`}>
+                    <FileText className={`w-5 h-5 ${file ? "text-brand-400" : "text-slate-500"}`} />
+                    <span className={`text-sm font-medium truncate ${file ? "text-brand-300" : "text-slate-400"}`}>
+                      {file ? file.name : "Select CSV Dataset..."}
+                    </span>
+                  </div>
+                </div>
+                
+                <button 
+                  onClick={handleUpload}
+                  disabled={!file || uploading}
+                  className={`px-5 py-3 rounded-lg font-medium text-sm flex items-center justify-center min-w-[140px] transition-all ${
+                    !file || uploading ? "bg-white/5 text-slate-500 cursor-not-allowed" : "btn-primary"
+                  }`}
+                >
+                  {uploading ? (
+                    <span className="flex items-center gap-2">
+                      <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                      Retraining ML...
+                    </span>
+                  ) : "Upload & Train"}
+                </button>
+              </div>
             </div>
           </motion.section>
         </div>

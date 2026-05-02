@@ -10,18 +10,9 @@ import {
   Sparkles, WifiOff, RefreshCw,
 } from "lucide-react";
 import {
-  predictDemand, getHourlyPricing, getWeeklyDayForecast,
+  predictDemand, getHourlyPricing, getWeeklyDayForecast, getDynamicZones, getDynamicModels,
   type PredictionResult, type HourlyPricePoint, type WeeklyDayForecast,
 } from "@/lib/api";
-
-const AREAS  = ["Indiranagar","Koramangala","Whitefield","Marathahalli","HSR Layout","Jayanagar","Electronic City","Hebbal"];
-const MODELS = ["Ather 450X","Bounce Infinity","Yulu Move","Rapido Bike","Royal Enfield","Honda Activa"];
-
-// Base price per model (₹/hr at ×1.00 surge)
-const BASE_PRICES: Record<string, number> = {
-  "Ather 450X": 81, "Bounce Infinity": 69, "Yulu Move": 45,
-  "Rapido Bike": 38, "Royal Enfield": 120, "Honda Activa": 55,
-};
 
 function ChartTooltip({ active, payload, label }: any) {
   if (!active || !payload?.length) return null;
@@ -53,6 +44,23 @@ export default function PredictorPage() {
   const [isLive,   setIsLive]   = useState<boolean | null>(null);
   const [error,    setError]    = useState<string | null>(null);
   const [history,  setHistory]  = useState<Array<PredictionResult & { id: number; duration: number; model: string; area: string }>>([]);
+
+  // ── Dynamic Zones & Models ──────────────────────────────────────────────────
+  const [dynamicAreas, setDynamicAreas] = useState<string[]>([]);
+  const [dynamicModels, setDynamicModels] = useState<string[]>([]);
+
+  useEffect(() => {
+    const initConfig = async () => {
+      try {
+        const [zones, models] = await Promise.all([getDynamicZones(), getDynamicModels()]);
+        setDynamicAreas(zones);
+        setDynamicModels(models);
+        if (zones.length > 0) setForm(f => ({ ...f, area: zones[0] }));
+        if (models.length > 0) setForm(f => ({ ...f, model: models[0] }));
+      } catch (e) {}
+    };
+    initConfig();
+  }, []);
 
   // ── Chart data — fetched from backend ──────────────────────────────────────
   const [hourlyData,  setHourlyData]  = useState<HourlyPricePoint[]>([]);
@@ -151,13 +159,13 @@ export default function PredictorPage() {
               <div>
                 <label className="text-xs text-slate-500 mb-1.5 block">Pickup Zone</label>
                 <select id="predict-area" value={form.area} onChange={e => setForm({ ...form, area: e.target.value })} className="input-dark w-full">
-                  {AREAS.map(a => <option key={a}>{a}</option>)}
+                  {dynamicAreas.map(a => <option key={a}>{a}</option>)}
                 </select>
               </div>
               <div>
                 <label className="text-xs text-slate-500 mb-1.5 block">Bike Model</label>
                 <select id="predict-model" value={form.model} onChange={e => setForm({ ...form, model: e.target.value })} className="input-dark w-full">
-                  {MODELS.map(m => <option key={m}>{m}</option>)}
+                  {dynamicModels.map(m => <option key={m}>{m}</option>)}
                 </select>
               </div>
               <div className="grid grid-cols-2 gap-3">
@@ -295,8 +303,8 @@ export default function PredictorPage() {
                 <div className="glass rounded-2xl p-5">
                   <h4 className="text-sm font-semibold text-white mb-3">Compare All Models · {result.location}</h4>
                   <div className="space-y-2">
-                    {MODELS.map(m => {
-                      const bp = BASE_PRICES[m] ?? 65;
+                    {dynamicModels.map(m => {
+                      const bp = 65; // Dynamic models default to 65 unless specified in backend
                       const pr = parseFloat((bp * result.surge_multiplier).toFixed(2));
                       return (
                         <div key={m} className={`flex items-center justify-between p-2.5 rounded-lg transition-all ${m === form.model ? "bg-brand-500/10 border border-brand-500/20" : "glass-light"}`}>

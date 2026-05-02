@@ -138,6 +138,8 @@ export const getLiveAlerts        = () => apiFetch<any[]>(`${ML_API}/admin/alert
 export const getZoneIntelligence  = () => apiFetch<any[]>(`${ML_API}/admin/zone-intelligence`);
 export const getCustomerAnalytics = () => apiFetch<any>(`${ML_API}/admin/customers/analytics`);
 export const getMonthlyReport     = () => apiFetch<any[]>(`${ML_API}/admin/reports/monthly`);
+export const getDynamicZones      = () => apiFetch<string[]>(`${ML_API}/admin/config/zones`);
+export const getDynamicModels     = () => apiFetch<string[]>(`${ML_API}/admin/config/models`);
 
 export const getPricingRec = (area: string, hour: number, is_weekend = false, date?: string) => {
   let url = `${ML_API}/admin/pricing/recommend?area=${encodeURIComponent(area)}&hour=${hour}&is_weekend=${is_weekend}`;
@@ -183,3 +185,35 @@ export const getRecommendations = (area?: string) => apiFetch<any>(`${ML_API}/co
 export const getPriceTrend      = () => apiFetch<{ dt: string; price: number; demand: number }[]>(`${ML_API}/consumer/price-trend`);
 export const getHourlyPricing    = (area?: string) => apiFetch<HourlyPricePoint[]>(`${ML_API}/consumer/hourly-pricing${area ? `?area=${encodeURIComponent(area)}` : ""}`);
 export const getWeeklyDayForecast = () => apiFetch<WeeklyDayForecast[]>(`${ML_API}/consumer/weekly-forecast`);
+
+// ── Email Verification ─────────────────────────────────────────────────────────
+export interface SendVerificationResult {
+  success: boolean;
+  dev_mode?: boolean;
+  dev_otp?: string;   // only present in dev mode (no SMTP configured)
+  message?: string;
+  error?: string;
+}
+export interface VerifyCodeResult {
+  success: boolean;
+  message?: string;
+  error?: string;
+}
+
+export async function sendVerificationEmail(email: string, name: string): Promise<SendVerificationResult> {
+  const res = await fetch(`${ML_API}/auth/send-verification`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ email, name }),
+  });
+  return res.json();
+}
+
+export async function verifyEmailCode(email: string, code: string): Promise<VerifyCodeResult> {
+  const res = await fetch(`${ML_API}/auth/verify-code`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ email, code }),
+  });
+  return res.json();
+}

@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 
-const ML_BASE = (process.env.ML_API_URL || "http://localhost:8000").replace(/\/$/, "");
+const ML_BASE = (process.env.ML_API_URL || "http://127.0.0.1:8000").replace(/\/$/, "");
 
 async function proxy(req: NextRequest, pathSegments: string[]): Promise<NextResponse> {
   const path = pathSegments.join("/");
@@ -9,21 +9,44 @@ async function proxy(req: NextRequest, pathSegments: string[]): Promise<NextResp
 
   try {
     const isPost = req.method === "POST" || req.method === "PUT" || req.method === "PATCH";
-    const body = isPost ? await req.text() : undefined;
-
-    const res = await fetch(url, {
-      method: req.method,
-      headers: { "Content-Type": "application/json", Accept: "application/json" },
-      body,
-      signal: AbortSignal.timeout(20000),
+    
+    const headers = new Headers();
+    req.headers.forEach((value, key) => {
+      const lowerKey = key.toLowerCase();
+      // Avoid forwarding headers that can break the proxy request
+      if (lowerKey !== "host" && lowerKey !== "connection" && lowerKey !== "content-length") {
+        headers.set(key, value);
+      }
     });
+    headers.set("Accept", "application/json");
 
-    const data = await res.json();
+    const fetchOptions: any = {
+      method: req.method,
+      headers,
+      signal: AbortSignal.timeout(20000),
+    };
+
+    if (isPost) {
+      const buffer = await req.arrayBuffer();
+      fetchOptions.body = buffer;
+      // duplex is not needed when body is a buffer
+    }
+
+    console.log(`[ML Proxy] Sending ${req.method} to ${url}`);
+    const res = await fetch(url, fetchOptions);
+    
+    const responseText = await res.text();
+    console.log(`[ML Proxy] Response from FastAPI: ${res.status} ${responseText}`);
+    
+    let data;
+    try { data = JSON.parse(responseText); } catch(e) { data = { error: "Invalid JSON from backend", raw: responseText }; }
+    
     return NextResponse.json(data, { status: res.status });
   } catch (err: any) {
     console.error(`[ML Proxy] ${req.method} ${url} failed:`, err?.message ?? err);
+    try { require('fs').writeFileSync('proxy_error.log', String(err?.stack || err?.message || err)); } catch(e){}
     return NextResponse.json(
-      { success: false, error: "ML backend unreachable", detail: err?.message },
+      { success: false, error: "ML backend unreachable: " + (err?.message || "Unknown"), detail: err?.message },
       { status: 503 }
     );
   }

@@ -8,9 +8,17 @@ from fastapi.middleware.cors import CORSMiddleware
 from contextlib import asynccontextmanager
 import uvicorn
 import logging
+import os
+
+# Load .env file if present (for local development with SMTP credentials)
+try:
+    from dotenv import load_dotenv
+    load_dotenv()
+except ImportError:
+    pass  # python-dotenv not installed — env vars must be set externally
 
 from core.model_engine import ModelEngine
-from routers import predict, admin, consumer
+from routers import predict, admin, consumer, auth
 
 logger = logging.getLogger("bikesense")
 engine: ModelEngine = None
@@ -48,9 +56,10 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-app.include_router(predict.router, prefix="/api/v1", tags=["Predictions"])
-app.include_router(admin.router,   prefix="/api/v1/admin", tags=["Admin"])
+app.include_router(predict.router, prefix="/api/v1",          tags=["Predictions"])
+app.include_router(admin.router,   prefix="/api/v1/admin",    tags=["Admin"])
 app.include_router(consumer.router,prefix="/api/v1/consumer", tags=["Consumer"])
+app.include_router(auth.router,    prefix="/api/v1/auth",     tags=["Auth"])
 
 
 @app.get("/health")

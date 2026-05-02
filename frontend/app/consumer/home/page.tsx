@@ -10,17 +10,9 @@ import {
   Sparkles, AlertTriangle, CheckCircle, RefreshCw, WifiOff, Bike
 } from "lucide-react";
 import {
-  predictDemand, getBikes, getBestTime, getHourlyPricing,
+  predictDemand, getBikes, getBestTime, getHourlyPricing, getDynamicZones, getDynamicModels,
   type BikeItem, type HourlyPricePoint,
 } from "@/lib/api";
-
-const AREAS  = ["Indiranagar","Koramangala","Whitefield","Marathahalli","HSR Layout","Jayanagar","Electronic City","Hebbal"];
-const MODELS = ["Ather 450X","Bounce Infinity","Yulu Move","Rapido Bike","Royal Enfield","Honda Activa"];
-
-const BASE_PRICES: Record<string, number> = {
-  "Ather 450X": 81, "Bounce Infinity": 69, "Yulu Move": 45,
-  "Rapido Bike": 38, "Royal Enfield": 120, "Honda Activa": 55,
-};
 
 const BIKE_META: Record<string, { color: string; emoji: string }> = {
   "Ather 450X":     { color: "#6366f1", emoji: "⚡" },
@@ -53,8 +45,8 @@ function Skeleton({ className = "" }: { className?: string }) {
 }
 
 // ─── Dynamic Price Predictor (uses real backend) ──────────────────────────────
-function PricePredictor({ stdPrice, selectedArea, onAreaChange }: { stdPrice: number, selectedArea: string, onAreaChange: (a: string) => void }) {
-  const [form,    setForm]    = useState({ model: "Ather 450X", date: "", time: "09:00" });
+function PricePredictor({ stdPrice, selectedArea, onAreaChange, areas, models }: { stdPrice: number, selectedArea: string, onAreaChange: (a: string) => void, areas: string[], models: string[] }) {
+  const [form,    setForm]    = useState({ model: models[0] || "Standard Bike", date: "", time: "09:00" });
   const [result,  setResult]  = useState<any>(null);
   const [loading, setLoading] = useState(false);
   const [isLive,  setIsLive]  = useState<boolean | null>(null);
@@ -99,13 +91,13 @@ function PricePredictor({ stdPrice, selectedArea, onAreaChange }: { stdPrice: nu
         <div>
           <label className="text-xs text-slate-500 mb-1.5 block">Pickup Area</label>
           <select value={selectedArea} onChange={e => onAreaChange(e.target.value)} className="input-dark w-full">
-            {AREAS.map(a => <option key={a} value={a}>{a}</option>)}
+            {areas.map(a => <option key={a} value={a}>{a}</option>)}
           </select>
         </div>
         <div>
           <label className="text-xs text-slate-500 mb-1.5 block">Bike Type</label>
           <select value={form.model} onChange={e => setForm({ ...form, model: e.target.value })} className="input-dark w-full">
-            {MODELS.map(m => <option key={m} value={m}>{m}</option>)}
+            {models.map(m => <option key={m} value={m}>{m}</option>)}
           </select>
         </div>
         <div>
@@ -172,7 +164,9 @@ function PricePredictor({ stdPrice, selectedArea, onAreaChange }: { stdPrice: nu
 
 // ─── Main Page ────────────────────────────────────────────────────────────────
 export default function ConsumerHome() {
-  const [selectedArea, setSelectedArea] = useState("Indiranagar"); // Default nearby location
+  const [selectedArea, setSelectedArea] = useState("");
+  const [dynamicAreas, setDynamicAreas] = useState<string[]>([]);
+  const [dynamicModels, setDynamicModels] = useState<string[]>([]);
   const [bikes,       setBikes]       = useState<BikeItem[]>([]);
   const [hourlyData,  setHourlyData]  = useState<HourlyPricePoint[]>([]);
   const [tips,        setTips]        = useState<{ icon: string; title: string; desc: string; tag: string }[]>([]);
@@ -227,6 +221,25 @@ export default function ConsumerHome() {
   const savingNow = currentPricing ? parseFloat((peakPrice - currentPricing.price).toFixed(2)) : 0;
 
   useEffect(() => {
+    // Load dynamic zones and models first
+    const initData = async () => {
+      try {
+        const [zones, models] = await Promise.all([getDynamicZones(), getDynamicModels()]);
+        setDynamicAreas(zones);
+        setDynamicModels(models);
+        if (!selectedArea && zones.length > 0) {
+          setSelectedArea(zones[0]);
+        }
+      } catch (e) {
+        console.error("Failed to load dynamic config", e);
+      }
+    };
+    initData();
+  }, []);
+
+  useEffect(() => {
+    if (!selectedArea) return;
+
     // Load bikes
     const loadBikes = async () => {
       setLoadingBikes(true);
@@ -382,7 +395,7 @@ export default function ConsumerHome() {
       <div className="grid lg:grid-cols-5 gap-6">
         {/* Price Predictor */}
         <div className="lg:col-span-2">
-          <PricePredictor stdPrice={stdPrice} selectedArea={selectedArea} onAreaChange={setSelectedArea} />
+          <PricePredictor stdPrice={stdPrice} selectedArea={selectedArea} onAreaChange={setSelectedArea} areas={dynamicAreas.length > 0 ? dynamicAreas : ["Loading..."]} models={dynamicModels.length > 0 ? dynamicModels : ["Loading..."]} />
         </div>
 
         {/* Right Column */}

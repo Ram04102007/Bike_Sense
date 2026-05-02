@@ -72,7 +72,48 @@ class ModelEngine:
         df["month_sin"] = np.sin(2*np.pi*df["dteday"].dt.month/12)
         df["month_cos"] = np.cos(2*np.pi*df["dteday"].dt.month/12)
         self.df = df
-        logger.info(f"Data loaded: {len(df):,} rows, {df['datetime'].min().date()} → {df['datetime'].max().date()}")
+        
+        # Dynamically determine zones from data
+        if "zone" in df.columns and len(df["zone"].dropna().unique()) > 0:
+            self.dynamic_zones = list(df["zone"].dropna().unique())
+        elif "area_name" in df.columns and len(df["area_name"].dropna().unique()) > 0:
+            self.dynamic_zones = list(df["area_name"].dropna().unique())
+        else:
+            self.dynamic_zones = ["City Center"]
+
+        # Ensure we have clean string names, some generators output "City" etc
+        self.dynamic_zones = [str(z).strip() for z in self.dynamic_zones]
+        
+        # Equal weights for dynamic zones by default
+        self.dynamic_area_weights = {z: 1.0 for z in self.dynamic_zones}
+        
+        # Try to restore Bangalore weights ONLY if the default Bangalore data is used
+        default_weights = {"Indiranagar":1.3,"Koramangala":1.2,"Whitefield":1.1,"Marathahalli":1.0,"HSR Layout":1.15,"Jayanagar":0.9,"Electronic City":0.95,"Hebbal":0.85}
+        for z in self.dynamic_zones:
+            if z in default_weights:
+                self.dynamic_area_weights[z] = default_weights[z]
+
+        # Dynamically determine models from data
+        if "bike_model" in df.columns and len(df["bike_model"].dropna().unique()) > 0:
+            models = list(df["bike_model"].dropna().unique())
+            if len(models) == 1 and models[0] == "All":
+                # If dataset is aggregated, provide standard fleet
+                self.dynamic_models = ["Ather 450X","Bounce Infinity","Yulu Move","Rapido Bike","Royal Enfield","Honda Activa"]
+            else:
+                self.dynamic_models = [str(m).strip() for m in models]
+        else:
+            self.dynamic_models = ["Standard Bike"]
+
+        self.dynamic_model_prices = {m: 65.0 for m in self.dynamic_models}
+        default_prices = {
+            "Ather 450X": 81, "Bounce Infinity": 69, "Yulu Move": 45,
+            "Rapido Bike": 38, "Royal Enfield": 120, "Honda Activa": 55,
+        }
+        for m in self.dynamic_models:
+            if m in default_prices:
+                self.dynamic_model_prices[m] = default_prices[m]
+
+        logger.info(f"Data loaded: {len(df):,} rows. Zones: {len(self.dynamic_zones)}, Models: {len(self.dynamic_models)}")
 
     def _generate_synthetic_data(self):
         """Generate enriched Bangalore bike demand dataset."""
@@ -239,30 +280,11 @@ class ModelEngine:
         today    = pd.Timestamp.now().normalize()
         delta    = (query_dt.normalize()-today).days
 
-        # ── Area-specific demand multipliers (realistic Bangalore zones) ────────
-        # High-demand commercial zones command premium prices due to congestion
-        AREA_WEIGHTS = {
-            "Indiranagar":    1.30,  # Premium — pubs, cafes, high footfall
-            "Koramangala":    1.22,  # High — tech offices + nightlife
-            "Whitefield":     1.12,  # Moderate-high — IT corridor
-            "Marathahalli":   1.08,  # Moderate — mix of offices & residential
-            "HSR Layout":     1.15,  # Moderate-high — startup hub
-            "Jayanagar":      0.92,  # Below avg — residential, quieter
-            "Electronic City":0.96,  # Moderate — industrial, predictable
-            "Hebbal":         0.87,  # Low — peripheral, less traffic
-        }
-        area_w = AREA_WEIGHTS.get(location, 1.0)
+        # ── Area-specific demand multipliers (dynamic) ────────
+        area_w = self.dynamic_area_weights.get(location, 1.0)
 
-        # ── Bike model base prices (realistic Bangalore rental market) ──────────
-        MODEL_BASE_PRICES = {
-            "Ather 450X":    81,   # Premium EV
-            "Bounce Infinity": 69, # Mid-tier EV
-            "Yulu Move":     45,   # Budget EV
-            "Rapido Bike":   38,   # Budget ICE
-            "Royal Enfield": 120,  # Premium ICE
-            "Honda Activa":  55,   # Standard scooter
-        }
-        model_base = MODEL_BASE_PRICES.get(bike_model, BASE_PRICE)
+        # ── Bike model base prices (dynamic) ──────────
+        model_base = self.dynamic_model_prices.get(bike_model, BASE_PRICE)
 
 
         if delta <= 7 and query_dt in self._fc_short["mean"].index:
@@ -501,9 +523,7 @@ class ModelEngine:
     def get_heatmap_data(self, target_date: str = None):
         """Return hour × location demand matrix. If target_date is given, predicts for that date."""
         df = self.df
-        area_weights = {"Indiranagar":1.3,"Koramangala":1.2,"Whitefield":1.1,
-                        "Marathahalli":1.0,"HSR Layout":1.15,"Jayanagar":0.9,
-                        "Electronic City":0.95,"Hebbal":0.85}
+        area_weights = self.dynamic_area_weights
         total_w = sum(area_weights.values())
 
         heat = {}
@@ -526,9 +546,7 @@ class ModelEngine:
                 heat = df.groupby(["area_name","hr"])["cnt"].mean().unstack("hr").fillna(0)
             else:
                 # Decompose using area weights
-                area_weights = {"Indiranagar":1.3,"Koramangala":1.2,"Whitefield":1.1,
-                                "Marathahalli":1.0,"HSR Layout":1.15,"Jayanagar":0.9,
-                                "Electronic City":0.95,"Hebbal":0.85}
+                area_weights = self.dynamic_area_weights
                 total_w = sum(area_weights.values())
                 hrly = df.groupby("hr")["cnt"].mean()
                 for area, w in area_weights.items():
@@ -571,9 +589,7 @@ class ModelEngine:
         }
 
     def get_price_recommendation(self, area: str, hour: int, is_weekend: bool = False, date: str = None) -> dict:
-        area_weights = {"Indiranagar":1.3,"Koramangala":1.2,"Whitefield":1.1,"Marathahalli":1.0,
-                        "HSR Layout":1.15,"Jayanagar":0.9,"Electronic City":0.95,"Hebbal":0.85}
-        area_w     = area_weights.get(area, 1.0)
+        area_w     = self.dynamic_area_weights.get(area, 1.0)
         hr_factor  = float(self.hourly_profile_norm[hour])
         wknd_boost = 1.1 if is_weekend else 1.0
         demand_idx = area_w * hr_factor * wknd_boost
@@ -621,9 +637,7 @@ class ModelEngine:
         last30_mask = df["dteday"] >= (df["dteday"].max()-pd.Timedelta(days=30))
         df30 = df[last30_mask]
         
-        area_weights = {"Indiranagar":1.3,"Koramangala":1.2,"Whitefield":1.1,
-                        "Marathahalli":1.0,"HSR Layout":1.15,"Jayanagar":0.9,
-                        "Electronic City":0.95,"Hebbal":0.85}
+        area_weights = self.dynamic_area_weights
         total_w = sum(area_weights.values())
         COMBO_SCALE = 48
         total_rides = int(df30["cnt"].sum() / COMBO_SCALE)

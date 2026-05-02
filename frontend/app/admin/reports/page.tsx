@@ -45,17 +45,140 @@ function transformRaw(raw: any[]): MonthRow[] {
 }
 
 function exportCSV(rows: MonthRow[]) {
+  const now    = new Date().toISOString().slice(0, 10);
   const header = "Month,Type,Total Rides,Revenue (₹L),Growth (%),Avg Price (₹)\n";
-  const body = rows
-    .map(r => `${r.month},${r.isForecast ? 'Forecast' : 'Actual'},${r.rides},${r.revenue},${r.growth ?? "—"},${r.avgPrice}`)
+  const body   = rows
+    .map(r => `${r.month},${r.isForecast ? "Forecast" : "Actual"},${r.rides},${r.revenue},${r.growth ?? "-"},${r.avgPrice}`)
     .join("\n");
   const blob = new Blob([header + body], { type: "text/csv;charset=utf-8;" });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement("a");
-  a.href = url;
-  a.download = `bikesense_ml_report_${new Date().toISOString().slice(0, 10)}.csv`;
+  const url  = URL.createObjectURL(blob);
+  const a    = document.createElement("a");
+  a.href     = url;
+  a.download = `bikesense_report_${now}.csv`;
   a.click();
   URL.revokeObjectURL(url);
+}
+
+function openPrintReport(
+  rows: MonthRow[],
+  reportType: "monthly" | "investor",
+  kpis: {
+    totalRevenue: string;
+    historicalRevenue: number;
+    forecastRevenue: number;
+    totalRides: number;
+    avgRevenuePerRide: string;
+    bestMonth: MonthRow | undefined;
+    lastGrowth: number | null;
+  }
+) {
+  const now        = new Date().toLocaleDateString("en-IN", { day:"2-digit", month:"long", year:"numeric" });
+  const historical = rows.filter(r => !r.isForecast);
+  const forecast   = rows.filter(r => r.isForecast);
+  const title      = reportType === "monthly" ? "Monthly Performance Report" : "Investor Executive Report";
+
+  const tableRows = [...rows].reverse().map(r => `
+    <tr>
+      <td class="pl">${r.month}${r.isForecast ? ' <span class="fc-badge">Forecast</span>' : ""}</td>
+      <td class="pr">${r.rides.toLocaleString()}</td>
+      <td class="pr fw">₹${r.revenue}L</td>
+      <td class="pr" style="color:${r.growth === null ? "#94a3b8" : r.growth >= 0 ? "#16a34a" : "#dc2626"}">
+        ${r.growth !== null ? (r.growth >= 0 ? "↑" : "↓") + " " + Math.abs(r.growth) + "%" : "—"}
+      </td>
+      <td class="pr">₹${r.avgPrice}</td>
+      <td class="pc">
+        <span class="badge ${r.isForecast ? "b-pred" : r.growth && r.growth > 10 ? "b-good" : r.growth && r.growth < 0 ? "b-bad" : "b-mid"}">
+          ${r.isForecast ? "Predicted" : r.growth && r.growth > 10 ? "Strong" : r.growth && r.growth < 0 ? "Decline" : "Steady"}
+        </span>
+      </td>
+    </tr>`).join("");
+
+  const investorExtra = reportType === "investor" ? `
+    <div class="highlight-box">
+      <div class="hb-title">SARIMA Forecast Highlights</div>
+      <ul>
+        <li>12-month forecast revenue: <b>₹${kpis.forecastRevenue.toFixed(1)}L</b></li>
+        <li>Historical verified revenue: <b>₹${kpis.historicalRevenue.toFixed(1)}L</b></li>
+        <li>Projected rides (forecast): <b>${forecast.reduce((a,r)=>a+r.rides,0).toLocaleString()}</b></li>
+        <li>Current MoM growth: <b>${kpis.lastGrowth !== null ? (kpis.lastGrowth >= 0 ? "+" : "") + kpis.lastGrowth + "%" : "—"}</b></li>
+        <li>Best performing month: <b>${kpis.bestMonth?.month ?? "—"} (₹${kpis.bestMonth?.revenue}L)</b></li>
+      </ul>
+    </div>` : "";
+
+  const html = `<!DOCTYPE html>
+<html><head><meta charset="UTF-8"/><title>BikeSense — ${title}</title>
+<style>
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;color:#1e293b;background:#fff;padding:40px}
+  @media print{.no-print{display:none}body{padding:20px}}
+  header{display:flex;justify-content:space-between;align-items:flex-start;border-bottom:3px solid #6366f1;padding-bottom:20px;margin-bottom:28px}
+  .logo{display:flex;align-items:center;gap:12px}
+  .logo-icon{width:44px;height:44px;background:linear-gradient(135deg,#6366f1,#8b5cf6);border-radius:10px;display:flex;align-items:center;justify-content:center;font-size:22px}
+  .brand-name{font-size:22px;font-weight:800;color:#6366f1}
+  .brand-sub{font-size:11px;color:#64748b;margin-top:2px}
+  .meta{text-align:right}
+  .meta-title{font-size:14px;font-weight:700}
+  .meta-date{font-size:11px;color:#94a3b8;margin-top:3px}
+  .ai-badge{display:inline-block;background:#ede9fe;color:#6d28d9;padding:3px 9px;border-radius:20px;font-size:11px;font-weight:600;margin-top:6px}
+  .kpi-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:14px;margin-bottom:28px}
+  .kpi{background:#f8fafc;border:1px solid #e2e8f0;border-radius:10px;padding:14px}
+  .kpi-label{font-size:10px;color:#64748b;font-weight:700;text-transform:uppercase;letter-spacing:.05em;margin-bottom:5px}
+  .kpi-value{font-size:20px;font-weight:800}
+  .kpi-sub{font-size:10px;color:#94a3b8;margin-top:3px}
+  .section-title{font-size:14px;font-weight:700;margin:22px 0 10px;border-bottom:1px solid #f1f5f9;padding-bottom:7px}
+  table{width:100%;border-collapse:collapse;font-size:13px}
+  thead tr{background:#f8fafc}
+  th{padding:9px 12px;font-size:10px;font-weight:700;color:#64748b;text-transform:uppercase;letter-spacing:.05em;border-bottom:2px solid #e2e8f0}
+  td{padding:10px 12px;border-bottom:1px solid #f1f5f9}
+  .pl{padding-left:12px;font-weight:600}
+  .pr{text-align:right}
+  .pc{text-align:center}
+  .fw{font-weight:700}
+  .fc-badge{font-size:10px;background:#ede9fe;color:#7c3aed;padding:1px 6px;border-radius:4px;font-weight:600;margin-left:4px}
+  .badge{display:inline-block;padding:2px 9px;border-radius:12px;font-size:11px;font-weight:600}
+  .b-pred{background:#ede9fe;color:#6d28d9}
+  .b-good{background:#dcfce7;color:#15803d}
+  .b-bad{background:#fee2e2;color:#b91c1c}
+  .b-mid{background:#fef9c3;color:#92400e}
+  .highlight-box{background:#f0fdf4;border-left:4px solid #22c55e;padding:15px 18px;margin:22px 0;border-radius:0 8px 8px 0}
+  .hb-title{font-size:12px;color:#166534;font-weight:700;margin-bottom:8px}
+  ul{padding-left:18px;color:#15803d;font-size:13px;line-height:2}
+  footer{margin-top:36px;padding-top:14px;border-top:1px solid #e2e8f0;display:flex;justify-content:space-between;font-size:10px;color:#94a3b8}
+  .print-btn{position:fixed;top:20px;right:20px;padding:9px 18px;background:#6366f1;color:#fff;border:none;border-radius:8px;font-weight:600;font-size:13px;cursor:pointer;box-shadow:0 4px 12px rgba(99,102,241,.3)}
+</style></head><body>
+<button class="no-print print-btn" onclick="window.print()">⬇ Save as PDF</button>
+<header>
+  <div class="logo">
+    <div class="logo-icon">🚲</div>
+    <div><div class="brand-name">BikeSense AI</div><div class="brand-sub">Bangalore's Smart Bike Rental Platform</div></div>
+  </div>
+  <div class="meta">
+    <div class="meta-title">${title}</div>
+    <div class="meta-date">Generated: ${now}</div>
+    <div class="ai-badge">🤖 SARIMA ML Engine</div>
+  </div>
+</header>
+<div class="kpi-grid">
+  <div class="kpi"><div class="kpi-label">Total Revenue</div><div class="kpi-value" style="color:#6366f1">₹${kpis.totalRevenue}L</div><div class="kpi-sub">Actual + 12m forecast</div></div>
+  <div class="kpi"><div class="kpi-label">Historical Revenue</div><div class="kpi-value" style="color:#16a34a">₹${kpis.historicalRevenue.toFixed(1)}L</div><div class="kpi-sub">${historical.length} months verified</div></div>
+  <div class="kpi"><div class="kpi-label">Total Rides</div><div class="kpi-value">${kpis.totalRides.toLocaleString()}</div><div class="kpi-sub">Actual + predicted</div></div>
+  <div class="kpi"><div class="kpi-label">Avg Rev / Ride</div><div class="kpi-value">₹${kpis.avgRevenuePerRide}</div><div class="kpi-sub">Incl. surge pricing</div></div>
+</div>
+${investorExtra}
+<div class="section-title">Monthly Breakdown — Live ML Data</div>
+<table>
+  <thead><tr><th>Month</th><th style="text-align:right">Rides</th><th style="text-align:right">Revenue</th><th style="text-align:right">Growth</th><th style="text-align:right">Avg Price</th><th style="text-align:center">Status</th></tr></thead>
+  <tbody>${tableRows}</tbody>
+</table>
+<footer>
+  <div>© ${new Date().getFullYear()} BikeSense AI · Powered by SARIMA Forecasting Engine</div>
+  <div>${rows.length} months (${historical.length} actual + ${forecast.length} forecast)</div>
+</footer>
+</body></html>`;
+
+  const win = window.open("", "_blank", "width=1000,height=750");
+  if (win) { win.document.write(html); win.document.close(); }
+  else toast.error("Pop-up blocked! Allow pop-ups for this site.");
 }
 
 // ─── Chart Tooltip ────────────────────────────────────────────────────────────
@@ -148,20 +271,28 @@ export default function ReportsPage() {
 
   // ── Export handlers ──
   const handleExport = async (type: string) => {
-    if (monthlyData.length === 0) {
-      toast.error("No data available to export.");
-      return;
-    }
+    if (monthlyData.length === 0) { toast.error("No data to export — load ML data first."); return; }
     setGenerating(type);
-    if (type === "Raw Data CSV") {
-      exportCSV(monthlyData);
-      toast.success("CSV exported successfully!");
-    } else {
-      // Simulate PDF generation for other report types
-      await new Promise(r => setTimeout(r, 1500));
-      toast.success(`${type} exported! (demo mode)`);
+    const kpis = {
+      totalRevenue, historicalRevenue, forecastRevenue,
+      totalRides, avgRevenuePerRide, bestMonth, lastGrowth,
+    };
+    try {
+      if (type === "Raw Data CSV") {
+        exportCSV(monthlyData);
+        toast.success(`CSV exported — ${monthlyData.length} months of ML data`);
+      } else if (type === "Monthly PDF") {
+        openPrintReport(monthlyData, "monthly", kpis);
+        toast.success("Report opened — click \"Save as PDF\" in the print window");
+      } else if (type === "Investor Report") {
+        openPrintReport(monthlyData, "investor", kpis);
+        toast.success("Investor report opened — click \"Save as PDF\" in the print window");
+      }
+    } catch {
+      toast.error("Export failed. Please try again.");
+    } finally {
+      setGenerating(null);
     }
-    setGenerating(null);
   };
 
   return (

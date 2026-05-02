@@ -1,5 +1,5 @@
 """Admin endpoints — revenue, heatmap, fleet, pricing."""
-from fastapi import APIRouter, Request
+from fastapi import APIRouter, Request, UploadFile, File
 from typing import Optional
 from pydantic import BaseModel
 
@@ -32,6 +32,40 @@ async def update_ml_config(config: MLConfigUpdate, request: Request):
         "event_multiplier": config.event_multiplier
     }
     return {"success": True, "message": "ML Configuration updated successfully."}
+
+
+@router.get("/config/zones")
+async def get_zones(request: Request):
+    engine = request.app.state.engine
+    zones = getattr(engine, "dynamic_zones", ["City Center"])
+    return {"success": True, "data": zones}
+
+@router.get("/config/models")
+async def get_models(request: Request):
+    engine = request.app.state.engine
+    models = getattr(engine, "dynamic_models", ["Standard Bike"])
+    return {"success": True, "data": models}
+
+
+@router.post("/upload-dataset")
+async def upload_dataset(request: Request, file: UploadFile = File(...)):
+    engine = request.app.state.engine
+    from core.model_engine import DATA_PATH
+    import asyncio
+    try:
+        # Read file content asynchronously and save to disk
+        contents = await file.read()
+        if not contents:
+            return {"success": False, "error": "Uploaded file is empty."}
+        with open(DATA_PATH, "wb") as buffer:
+            buffer.write(contents)
+        # Retrain SARIMA models in a background thread (non-blocking)
+        # so the HTTP response returns immediately without timing out
+        loop = asyncio.get_event_loop()
+        loop.run_in_executor(None, engine.train)
+        return {"success": True, "message": "Dataset uploaded! SARIMA models are retraining in the background."}
+    except Exception as e:
+        return {"success": False, "error": str(e)}
 
 
 @router.get("/revenue")
@@ -77,8 +111,7 @@ async def zone_price_matrix(is_weekend: bool = False, date: str = None, hour: in
     engine = request.app.state.engine
     current_hour = hour if hour is not None else datetime.now().hour
     is_wknd = datetime.now().weekday() >= 5 or is_weekend
-    zones = ["Indiranagar", "Koramangala", "Whitefield", "Marathahalli",
-             "HSR Layout", "Jayanagar", "Electronic City", "Hebbal"]
+    zones = getattr(engine, "dynamic_zones", ["City Center"])
     matrix = []
     for zone in zones:
         rec = engine.get_price_recommendation(zone, current_hour, is_wknd, date)
@@ -110,14 +143,21 @@ async def get_fleet(request: Request):
     current_hour = datetime.now().hour
     is_weekend = datetime.now().weekday() >= 5
 
+    zones = getattr(engine, "dynamic_zones", ["City Center"])
+    # If using Bangalore default zones, use realistic fleet numbers
     base_totals = {
         "Indiranagar": 250, "Koramangala": 220, "Whitefield": 180,
         "Marathahalli": 160, "HSR Layout": 190, "Jayanagar": 140,
         "Electronic City": 130, "Hebbal": 110
     }
+    # Otherwise fallback to default inventory for dynamic zones
+    for z in zones:
+        if z not in base_totals:
+            base_totals[z] = 150
     
     fleet = []
-    for a, total in base_totals.items():
+    for a in zones:
+        total = base_totals[a]
         # Pull real demand index from the SARIMA model engine
         ml_data = engine.get_price_recommendation(a, current_hour, is_weekend)
         demand_score = ml_data.get("demand_index", 1.0)
@@ -159,14 +199,34 @@ async def get_fleet_models(request: Request):
     demand_idx = rec.get("demand_index", 1.0)
     surge = rec.get("surge_multiplier", 1.0)
 
-    model_configs = [
-        {"model": "Ather 450X",      "count": 247, "type": "EV",      "avg_battery": True,  "base_rev": 4.2},
-        {"model": "Bounce Infinity",  "count": 198, "type": "EV",      "avg_battery": True,  "base_rev": 3.1},
-        {"model": "Yulu Move",        "count": 156, "type": "EV",      "avg_battery": True,  "base_rev": 1.8},
-        {"model": "Honda Activa",     "count": 183, "type": "Scooter", "avg_battery": False, "base_rev": 2.8},
-        {"model": "Royal Enfield",    "count":  87, "type": "Premium", "avg_battery": False, "base_rev": 3.4},
-        {"model": "Rapido Bike",      "count": 132, "type": "Budget",  "avg_battery": False, "base_rev": 1.4},
-    ]
+    dynamic_models = getattr(engine, "dynamic_models", ["Standard Bike"])
+    model_prices = getattr(engine, "dynamic_model_prices", {})
+
+    model_configs = []
+    # If the exact Bangalore models are found, use their specific realistic attributes
+    default_configs = {
+        "Ather 450X":      {"count": 247, "type": "EV",      "avg_battery": True,  "base_rev": 4.2},
+        "Bounce Infinity": {"count": 198, "type": "EV",      "avg_battery": True,  "base_rev": 3.1},
+        "Yulu Move":       {"count": 156, "type": "EV",      "avg_battery": True,  "base_rev": 1.8},
+        "Honda Activa":    {"count": 183, "type": "Scooter", "avg_battery": False, "base_rev": 2.8},
+        "Royal Enfield":   {"count":  87, "type": "Premium", "avg_battery": False, "base_rev": 3.4},
+        "Rapido Bike":     {"count": 132, "type": "Budget",  "avg_battery": False, "base_rev": 1.4},
+    }
+
+    for m in dynamic_models:
+        if m in default_configs:
+            cfg = default_configs[m].copy()
+            cfg["model"] = m
+            model_configs.append(cfg)
+        else:
+            base = model_prices.get(m, 65.0)
+            model_configs.append({
+                "model": m,
+                "count": 100 + random.randint(0, 100),
+                "type": "Standard",
+                "avg_battery": random.choice([True, False]),
+                "base_rev": round((base / 65.0) * 2.5, 1)
+            })
     models = []
     for m in model_configs:
         # Determine utilization purely from ML demand index
@@ -210,10 +270,7 @@ async def get_live_alerts(request: Request):
     alerts = []
     now = datetime.now()
 
-    areas = [
-        "Indiranagar", "Koramangala", "Whitefield", "Marathahalli",
-        "HSR Layout", "Jayanagar", "Electronic City", "Hebbal"
-    ]
+    areas = getattr(engine, "dynamic_zones", ["City Center"])
 
     # Base fleet counts per area (mirrors fleet endpoint)
     base_fleet = {
@@ -221,6 +278,9 @@ async def get_live_alerts(request: Request):
         "Marathahalli": 160, "HSR Layout": 190, "Jayanagar": 140,
         "Electronic City": 130, "Hebbal": 110
     }
+    for z in areas:
+        if z not in base_fleet:
+            base_fleet[z] = 150
 
     # ── STEP 1: Scan next 3 hours across all zones ───────────────────────────
     # For each future hour, get SARIMA demand + surge for every area

@@ -29,7 +29,7 @@ export interface Session {
 }
 
 const SESSION_KEY = "bikesense_session";
-const USERS_KEY   = "bikesense_users";
+const USERS_KEY = "bikesense_users";
 
 // ── Token helpers ─────────────────────────────────────────────
 function generateToken(): string {
@@ -56,14 +56,35 @@ function saveUsers(users: Record<string, AuthUser & { passwordHash: string }>) {
   localStorage.setItem(USERS_KEY, JSON.stringify(users));
 }
 
-// SHA-256 hash (in production: bcrypt on server)
+// Pure-JS fallback hash — works even on non-secure HTTP origins (e.g. LAN IP)
+// where crypto.subtle is blocked by the browser.
+function _fallbackHash(str: string): string {
+  const salted = str + "bikesense_salt_2024";
+  let h1 = 0xdeadbeef, h2 = 0x41c6ce57;
+  for (let i = 0; i < salted.length; i++) {
+    const ch = salted.charCodeAt(i);
+    h1 = Math.imul(h1 ^ ch, 2654435761);
+    h2 = Math.imul(h2 ^ ch, 1597334677);
+  }
+  h1 = Math.imul(h1 ^ (h1 >>> 16), 2246822507) ^ Math.imul(h2 ^ (h2 >>> 13), 3266489909);
+  h2 = Math.imul(h2 ^ (h2 >>> 16), 2246822507) ^ Math.imul(h1 ^ (h1 >>> 13), 3266489909);
+  return (4294967296 * (2097151 & h2) + (h1 >>> 0)).toString(36).padStart(14, "0");
+}
+
+// SHA-256 when available (secure context), fallback otherwise
 async function hashPassword(password: string): Promise<string> {
-  const encoder = new TextEncoder();
-  const data = encoder.encode(password + "bikesense_salt_2024");
-  const hash = await crypto.subtle.digest("SHA-256", data);
-  return Array.from(new Uint8Array(hash))
-    .map(b => b.toString(16).padStart(2, "0"))
-    .join("");
+  try {
+    if (typeof crypto !== "undefined" && crypto.subtle) {
+      const encoder = new TextEncoder();
+      const data    = encoder.encode(password + "bikesense_salt_2024");
+      const hash    = await crypto.subtle.digest("SHA-256", data);
+      return Array.from(new Uint8Array(hash))
+        .map(b => b.toString(16).padStart(2, "0"))
+        .join("");
+    }
+  } catch { /* fall through */ }
+  // Non-secure context (HTTP on LAN IP) — use pure-JS hash
+  return _fallbackHash(password);
 }
 
 // ── Public API ────────────────────────────────────────────────
@@ -121,6 +142,22 @@ function createSession(user: AuthUser): Session {
     expiresAt: Date.now() + 7 * 24 * 60 * 60 * 1000, // 7 days
   };
   localStorage.setItem(SESSION_KEY, JSON.stringify(session));
+
+  // Fire-and-forget: register user on the backend server registry
+  // so developers can see all users via GET /api/v1/auth/users
+  fetch("/api/ml/auth/register", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      id: user.id,
+      firstName: user.firstName,
+      lastName: user.lastName,
+      email: user.email,
+      role: user.role,
+      createdAt: user.createdAt,
+    }),
+  }).catch(() => {/* best-effort — don't crash if backend is down */ });
+
   return session;
 }
 

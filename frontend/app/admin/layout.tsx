@@ -6,20 +6,25 @@ import { motion, AnimatePresence } from "framer-motion";
 import {
   LayoutDashboard, TrendingUp, DollarSign, Bike, Map, Users,
   FileBarChart2, Settings, Menu, X, ChevronRight, Bell, Search,
-  Zap, User, LogOut
+  Zap, User, LogOut, Shield
 } from "lucide-react";
 import { getUser, signOut as authSignOut, type AuthUser } from "@/lib/auth";
 
 
+const DEVELOPER_EMAILS = [
+  "thiruveedhula.sriram2007@gmail.com",
+  "ramasasankgudipati@gmail.com"
+];
+
 const navItems = [
-  { href:"/admin/dashboard",   label:"Dashboard",      icon:LayoutDashboard },
-  { href:"/admin/forecasting", label:"Forecasting",    icon:TrendingUp },
-  { href:"/admin/pricing",     label:"Pricing Engine", icon:DollarSign },
-  { href:"/admin/fleet",       label:"Fleet",          icon:Bike },
-  { href:"/admin/map",         label:"City Map",       icon:Map },
+  { href:"/admin/dashboard",   label:"Dashboard",        icon:LayoutDashboard },
+  { href:"/admin/forecasting", label:"Forecasting",      icon:TrendingUp },
+  { href:"/admin/pricing",     label:"Pricing Engine",   icon:DollarSign },
+  { href:"/admin/fleet",       label:"Fleet",            icon:Bike },
+  { href:"/admin/map",         label:"City Map",         icon:Map },
   { href:"/admin/analytics",   label:"Customer Analytics",icon:Users },
-  { href:"/admin/reports",     label:"Reports",        icon:FileBarChart2 },
-  { href:"/admin/settings",    label:"Settings",       icon:Settings },
+  { href:"/admin/reports",     label:"Reports",          icon:FileBarChart2 },
+  { href:"/admin/settings",    label:"Settings",         icon:Settings },
 ];
 
 export default function AdminLayout({ children }: { children: React.ReactNode }) {
@@ -102,6 +107,16 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
             </Link>
           );
         })}
+        {/* Developer Only Route */}
+        {currentUser && DEVELOPER_EMAILS.some(e => e.toLowerCase() === currentUser.email.toLowerCase()) && (
+          <Link href="/admin/users"
+            onClick={() => setMobileOpen(false)}
+            className={`sidebar-item ${pathname === "/admin/users" ? "active" : ""} ${collapsed && !mobile ? "justify-center px-2" : ""}`}>
+            <Shield className="w-4 h-4 shrink-0 text-amber-400" />
+            {(!collapsed || mobile) && <span className="text-amber-400/90 font-medium">User Management</span>}
+            {(!collapsed || mobile) && pathname === "/admin/users" && <ChevronRight className="w-3 h-3 ml-auto text-amber-400" />}
+          </Link>
+        )}
       </nav>
 
       {/* Bottom */}

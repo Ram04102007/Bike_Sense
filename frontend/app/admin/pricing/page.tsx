@@ -9,12 +9,7 @@ import {
   DollarSign, Zap, TrendingUp, RefreshCw,
   WifiOff, MapPin, Clock, Activity, Info,
 } from "lucide-react";
-import { getPricingRec, getHourlyPriceSchedule, getZonePriceMatrix, getEventPricing, getSurgeConfig, updateSurgeConfig } from "@/lib/api";
-
-const AREAS = [
-  "Indiranagar","Koramangala","Whitefield","Marathahalli",
-  "HSR Layout","Jayanagar","Electronic City","Hebbal",
-];
+import { getPricingRec, getHourlyPriceSchedule, getZonePriceMatrix, getEventPricing, getSurgeConfig, updateSurgeConfig, getDynamicZones } from "@/lib/api";
 
 function surgeColor(surge: number) {
   if (surge >= 1.25) return "#ef4444";
@@ -56,7 +51,8 @@ function TierBadge({ tier, surge }: { tier: string; surge: number }) {
 }
 
 export default function PricingPage() {
-  const [selectedArea, setSelectedArea] = useState("Indiranagar");
+  const [dynamicAreas, setDynamicAreas] = useState<string[]>([]);
+  const [selectedArea, setSelectedArea] = useState("");
   const [selectedHour, setSelectedHour] = useState(new Date().getHours());
   const [selectedDate, setSelectedDate] = useState(new Date().toISOString().split("T")[0]);
   const [isWeekend, setIsWeekend]       = useState(new Date().getDay() === 0 || new Date().getDay() === 6);
@@ -102,6 +98,21 @@ export default function PricingPage() {
 
   useEffect(() => { fetchSurgeConfig(); }, [fetchSurgeConfig]);
 
+  useEffect(() => {
+    const initZones = async () => {
+      try {
+        const zones = await getDynamicZones();
+        setDynamicAreas(zones);
+        if (!selectedArea && zones.length > 0) {
+          setSelectedArea(zones[0]);
+        }
+      } catch (err) {
+        console.error(err);
+      }
+    };
+    initZones();
+  }, []);
+
   const handleSaveSurgeConfig = async () => {
     if (!surgeConfig) return;
     setSurgeConfigSaving(true);
@@ -137,7 +148,7 @@ export default function PricingPage() {
     }
   }, [selectedArea, selectedHour, isWeekend, selectedDate]);
 
-  useEffect(() => { fetchRecommendation(); }, [fetchRecommendation]);
+  useEffect(() => { if (selectedArea) fetchRecommendation(); }, [fetchRecommendation, selectedArea]);
 
   // ── 24-hour schedule ───────────────────────────────────────────────────────
   const fetchHourly = useCallback(async () => {
@@ -151,7 +162,7 @@ export default function PricingPage() {
     finally  { setHourlyLoading(false); }
   }, [selectedArea, isWeekend]);
 
-  useEffect(() => { fetchHourly(); }, [fetchHourly]);
+  useEffect(() => { if (selectedArea) fetchHourly(); }, [fetchHourly, selectedArea]);
 
   // ── Zone matrix ───────────────────────────────────────────────────────────
   const fetchZones = useCallback(async () => {
@@ -185,7 +196,7 @@ export default function PricingPage() {
     finally  { setZoneLoading(false); }
   }, [isWeekend, zoneDay, zoneHour, selectedDate]);
 
-  useEffect(() => { fetchZones(); }, [fetchZones]);
+  useEffect(() => { if (selectedArea) fetchZones(); }, [fetchZones, selectedArea]);
 
   const fetchEvents = useCallback(async () => {
     setEventsLoading(true);
@@ -286,7 +297,7 @@ export default function PricingPage() {
               </label>
               <select value={selectedArea} onChange={e => setSelectedArea(e.target.value)}
                 className="input-dark w-full">
-                {AREAS.map(a => <option key={a}>{a}</option>)}
+                {dynamicAreas.map(a => <option key={a}>{a}</option>)}
               </select>
             </div>
 
