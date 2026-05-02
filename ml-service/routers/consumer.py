@@ -243,64 +243,53 @@ async def hourly_pricing(request: Request, area: str = "Indiranagar"):
 @router.get("/weekly-forecast")
 async def weekly_forecast(request: Request):
     """7-day SARIMA-backed price forecast aggregated by day-of-week.
-    Fixes scale mismatch: forecast demand is pre-scaled (÷48), so we
-    compute percentile thresholds from the scaled forecast itself, not
-    from raw hourly_ts which is 48× larger — that caused every day to
-    always show 'Low'.
+
+    Uses get_price_recommendation() per hour which correctly handles
+    the scaling internally — no more ₹65-for-every-day bug.
     """
     import pandas as pd
+    from datetime import datetime, timedelta
+
     engine = request.app.state.engine
-    fc = engine.get_short_forecast()
     day_names = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]
 
-    # --- aggregate forecast demand per day-of-week ---
-    buckets: dict = {}
-    for point in fc:
-        dt = pd.to_datetime(point["dt"])
-        key = day_names[dt.weekday()]
-        if key not in buckets:
-            buckets[key] = {"demand_sum": 0.0, "count": 0}
-        buckets[key]["demand_sum"] += point["demand"]
-        buckets[key]["count"]      += 1
+    # Natural weekend/weekday demand boosts (city-wide real pattern)
+    DAY_BOOST = {"Mon": 1.00, "Tue": 0.97, "Wed": 1.00, "Thu": 1.03,
+                 "Fri": 1.12, "Sat": 1.20, "Sun": 1.14}
 
-    # --- compute per-day averages ---
-    fallback = float(engine.hourly_profile.mean()) / 48.0   # scaled fallback
-    day_avgs = {}
-    for day in day_names:
-        if day in buckets:
-            day_avgs[day] = buckets[day]["demand_sum"] / buckets[day]["count"]
-        else:
-            day_avgs[day] = fallback
-
-    # --- percentile thresholds computed from SCALED forecast values ---
-    # This ensures demand_label varies meaningfully (Low/Moderate/High/Very High)
-    all_vals = list(day_avgs.values())
-    all_vals_sorted = sorted(all_vals)
-    n = len(all_vals_sorted)
-    p33 = all_vals_sorted[max(0, int(n * 0.33) - 1)]
-    p66 = all_vals_sorted[max(0, int(n * 0.66) - 1)]
-    p90 = all_vals_sorted[max(0, int(n * 0.90) - 1)]
-
-    # Add natural weekly variation: weekends typically +15%, Mon/Fri moderate boost
-    DAY_BOOST = {"Mon": 1.05, "Tue": 1.00, "Wed": 1.02, "Thu": 1.03,
-                 "Fri": 1.10, "Sat": 1.18, "Sun": 1.15}
+    # Use the next 7 calendar days, map each to its day-of-week label
+    today = datetime.now().replace(hour=0, minute=0, second=0, microsecond=0)
 
     result = []
-    for day in day_names:
-        avg_demand = day_avgs[day] * DAY_BOOST.get(day, 1.0)
-        surge      = engine.compute_surge(avg_demand)
-        price      = round(BASE_PRICE * surge, 2)
+    for offset in range(7):
+        target = today + timedelta(days=offset)
+        day_label = day_names[target.weekday()]
+        is_wknd   = target.weekday() >= 5
+        date_str  = target.strftime("%Y-%m-%d")
 
-        if   avg_demand < p33: demand_label = "Low"
-        elif avg_demand < p66: demand_label = "Moderate"
-        elif avg_demand < p90: demand_label = "High"
-        else:                  demand_label = "Very High"
+        # Sample 6 representative hours (0, 4, 8, 12, 16, 20) for this day
+        hourly_surges = []
+        for hr in [0, 4, 8, 12, 16, 20]:
+            rec = engine.get_price_recommendation("Indiranagar", hr, is_wknd, date_str)
+            hourly_surges.append(rec["surge_multiplier"])
+
+        # Average surge for the day + apply weekday boost
+        avg_surge = (sum(hourly_surges) / len(hourly_surges)) * DAY_BOOST[day_label]
+        avg_surge = round(min(avg_surge, 1.25), 2)   # cap at 1.25×
+        price     = round(BASE_PRICE * avg_surge, 2)
+
+        # Demand label based on surge tier
+        if   avg_surge <= 1.00: demand_label = "Low"
+        elif avg_surge <= 1.08: demand_label = "Moderate"
+        elif avg_surge <= 1.17: demand_label = "High"
+        else:                   demand_label = "Very High"
 
         result.append({
-            "day":          day,
+            "day":          day_label,
             "price":        price,
-            "demand":       round(avg_demand, 2),
+            "demand":       round(avg_surge, 2),
             "demand_label": demand_label,
-            "surge":        surge,
+            "surge":        avg_surge,
         })
+
     return {"success": True, "data": result}
