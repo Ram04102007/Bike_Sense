@@ -2,7 +2,7 @@
 import { useState, useEffect, useCallback } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { Bike, Battery, Star, MapPin, Filter, Search, Zap, ChevronRight, RefreshCw, WifiOff, Calendar } from "lucide-react";
-import { getBikes, type BikeItem } from "@/lib/api";
+import { getBikes, getDynamicZones, type BikeItem } from "@/lib/api";
 
 // ─── Bike metadata not returned by the API (colour, emoji, desc) ─────────────
 const BIKE_META: Record<string, { color: string; emoji: string; desc: string }> = {
@@ -14,10 +14,11 @@ const BIKE_META: Record<string, { color: string; emoji: string; desc: string }> 
   "Rapido Bike":    { color: "#94a3b8", emoji: "💰", desc: "Budget-friendly. Get around without breaking the bank." },
 };
 const getMeta = (name: string) =>
-  BIKE_META[name] ?? { color: "#6366f1", emoji: "🚲", desc: "Available for rent in Bangalore." };
+  BIKE_META[name] ?? { color: "#6366f1", emoji: "🚲", desc: "Available for rent in your city." };
 
 const TYPES = ["All", "EV", "Scooter", "Premium", "Budget"];
-const AREAS = ["All", "Indiranagar", "Koramangala", "Whitefield", "Marathahalli", "HSR Layout", "Jayanagar", "Electronic City", "Hebbal"];
+// We will fetch areas dynamically, but keep a fallback just in case
+const FALLBACK_AREAS = ["All", "Zone A", "Zone B", "Zone C", "Zone D"];
 
 // ─── Skeleton card ────────────────────────────────────────────────────────────
 function SkeletonCard() {
@@ -125,6 +126,13 @@ export default function MarketplacePage() {
   const [sortBy,     setSortBy]     = useState<"price" | "rating">("price");
   const [availOnly,  setAvailOnly]  = useState(false);
   const [targetTime, setTargetTime] = useState("");
+  const [dynamicAreas, setDynamicAreas] = useState<string[]>([]);
+
+  useEffect(() => {
+    getDynamicZones()
+      .then(zones => setDynamicAreas(["All", ...zones]))
+      .catch(() => setDynamicAreas(FALLBACK_AREAS));
+  }, []);
 
   const fetchBikes = useCallback(async () => {
     setLoading(true);
@@ -161,7 +169,7 @@ export default function MarketplacePage() {
             <Bike className="w-6 h-6 text-brand-400" /> Bike Marketplace
           </h1>
           <p className="text-slate-500 text-sm mt-0.5">
-            {loading ? "Loading bikes..." : `${filtered.length} bikes found across Bangalore`}
+            {loading ? "Loading bikes..." : `${filtered.length} bikes found in your city`}
           </p>
         </div>
         <div className="flex items-center gap-2">
@@ -226,7 +234,7 @@ export default function MarketplacePage() {
 
         {/* Area pills */}
         <div className="flex gap-2 flex-wrap">
-          {AREAS.map(a => (
+          {(dynamicAreas.length > 0 ? dynamicAreas : FALLBACK_AREAS).map(a => (
             <button key={a} onClick={() => setAreaFilter(a)}
               className={`px-3 py-1 rounded-full text-xs font-medium transition-all ${areaFilter === a ? "bg-brand-500 text-white" : "glass-light text-slate-400 hover:text-white"}`}>
               {a}

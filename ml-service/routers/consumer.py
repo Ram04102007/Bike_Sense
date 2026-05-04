@@ -8,17 +8,38 @@ from core.model_engine import BASE_PRICE
 
 router = APIRouter()
 
-# Bike Models Metadata — Pricing & range info
-BIKE_MODELS_METADATA = [
-    {"name": "Ather 450X",     "type": "EV",      "image": "ather",  "range_km": 85,  "battery": 92,  "rating": 4.8, "base_price": 81},
-    {"name": "Bounce Infinity","type": "EV",      "image": "bounce", "range_km": 70,  "battery": 76,  "rating": 4.5, "base_price": 69},
-    {"name": "Yulu Move",      "type": "EV",      "image": "yulu",   "range_km": 40,  "battery": 88,  "rating": 4.2, "base_price": 45},
-    {"name": "Honda Activa",   "type": "Scooter", "image": "activa", "range_km": None,"battery": None,"rating": 4.6, "base_price": 55},
-    {"name": "Royal Enfield",  "type": "Premium", "image": "re",     "range_km": None,"battery": None,"rating": 4.9, "base_price": 120},
-    {"name": "Rapido Bike",    "type": "Budget",  "image": "rapido", "range_km": None,"battery": None,"rating": 4.1, "base_price": 38},
-]
-
-AREAS = ["Indiranagar", "Koramangala", "Whitefield", "Marathahalli", "HSR Layout", "Jayanagar", "Electronic City", "Hebbal"]
+def get_bike_metadata(engine):
+    base_meta = {
+        "Ather 450X":      {"type": "EV",      "image": "ather",  "range_km": 85,  "battery": 92,  "rating": 4.8},
+        "Bounce Infinity": {"type": "EV",      "image": "bounce", "range_km": 70,  "battery": 76,  "rating": 4.5},
+        "Yulu Move":       {"type": "EV",      "image": "yulu",   "range_km": 40,  "battery": 88,  "rating": 4.2},
+        "Honda Activa":    {"type": "Scooter", "image": "activa", "range_km": None,"battery": None,"rating": 4.6},
+        "Royal Enfield":   {"type": "Premium", "image": "re",     "range_km": None,"battery": None,"rating": 4.9},
+        "Rapido Bike":     {"type": "Budget",  "image": "rapido", "range_km": None,"battery": None,"rating": 4.1},
+    }
+    result = []
+    for model_name in engine.dynamic_models:
+        if model_name in base_meta:
+            meta = base_meta[model_name].copy()
+        else:
+            # Dynamically invent realistic attributes for unknown dataset bikes
+            hash_val = sum(ord(c) for c in model_name)
+            types = ["Scooter", "Scooter", "Premium", "EV", "Standard"]
+            b_type = types[hash_val % len(types)]
+            rating = round(4.0 + ((hash_val % 10) / 10.0), 1)
+            is_ev = b_type == "EV"
+            meta = {
+                "type": b_type,
+                "image": "default",
+                "range_km": (60 + (hash_val % 40)) if is_ev else None,
+                "battery": (70 + (hash_val % 30)) if is_ev else None,
+                "rating": rating
+            }
+            
+        meta["name"] = model_name
+        meta["base_price"] = engine.dynamic_model_prices.get(model_name, 65.0)
+        result.append(meta)
+    return result
 
 
 @router.get("/bikes")
@@ -42,7 +63,9 @@ async def get_bikes(request: Request, area: Optional[str] = None, bike_type: Opt
     # We create multiple entries per area/model combination to simulate a full marketplace
     result = []
     
-    target_areas = [area] if area and area in AREAS else AREAS
+    target_areas = [area] if area and area in engine.dynamic_zones else engine.dynamic_zones
+    
+    bike_models_metadata = get_bike_metadata(engine)
     
     for zone in target_areas:
         # Get ML recommendation for this zone to compute pricing and availability
@@ -50,7 +73,7 @@ async def get_bikes(request: Request, area: Optional[str] = None, bike_type: Opt
         demand_idx = rec["demand_index"]
         surge = rec["surge_multiplier"]
         
-        for model in BIKE_MODELS_METADATA:
+        for model in bike_models_metadata:
             # Filter by type if requested
             if bike_type and model["type"].lower() != bike_type.lower():
                 continue
@@ -87,7 +110,7 @@ async def get_bikes(request: Request, area: Optional[str] = None, bike_type: Opt
 
 
 @router.get("/best-time")
-async def best_time_to_rent(request: Request, area: str = "Indiranagar"):
+async def best_time_to_rent(request: Request, area: str = "City Center"):
     """Suggest cheapest hours to rent using SARIMA hourly profile + ML surge computation."""
     engine = request.app.state.engine
     is_weekend = datetime.now().weekday() >= 5
@@ -134,7 +157,7 @@ async def best_time_to_rent(request: Request, area: str = "Indiranagar"):
 
 
 @router.get("/recommendations")
-async def get_recommendations(request: Request, area: Optional[str] = "Indiranagar"):
+async def get_recommendations(request: Request, area: Optional[str] = "City Center"):
     """Dynamic recommendations based on current ML demand intelligence."""
     engine = request.app.state.engine
     now = datetime.now()
@@ -160,8 +183,7 @@ async def get_recommendations(request: Request, area: Optional[str] = "Indiranag
         off_peak_label = "No off-peak window in the next 6 hours"
 
     # Nearby zones with their current pricing
-    all_zones = ["Indiranagar", "Koramangala", "Whitefield", "HSR Layout",
-                 "Marathahalli", "Jayanagar", "Electronic City", "Hebbal"]
+    all_zones = engine.dynamic_zones
     nearby = []
     for zone in all_zones[:4]:
         zrec = engine.get_price_recommendation(zone, current_hour, is_weekend)
@@ -222,7 +244,7 @@ async def price_trend(request: Request):
 
 
 @router.get("/hourly-pricing")
-async def hourly_pricing(request: Request, area: str = "Indiranagar"):
+async def hourly_pricing(request: Request, area: str = "City Center"):
     """24-hour price & demand profile from SARIMA hourly model."""
     engine = request.app.state.engine
     is_weekend = datetime.now().weekday() >= 5
@@ -270,7 +292,9 @@ async def weekly_forecast(request: Request):
         # Sample 6 representative hours (0, 4, 8, 12, 16, 20) for this day
         hourly_surges = []
         for hr in [0, 4, 8, 12, 16, 20]:
-            rec = engine.get_price_recommendation("Indiranagar", hr, is_wknd, date_str)
+            # Use the first dynamic zone for baseline surge calculations
+            baseline_zone = engine.dynamic_zones[0] if engine.dynamic_zones else "City Center"
+            rec = engine.get_price_recommendation(baseline_zone, hr, is_wknd, date_str)
             hourly_surges.append(rec["surge_multiplier"])
 
         # Average surge for the day + apply weekday boost

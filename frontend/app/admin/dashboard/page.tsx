@@ -414,7 +414,7 @@ export default function AdminDashboard() {
         <div>
           <h1 className="font-display font-bold text-2xl text-white">Command Center</h1>
           <p className="text-slate-500 text-sm mt-0.5">
-            Real-time fleet &amp; revenue intelligence · Bangalore
+            Real-time fleet &amp; revenue intelligence
           </p>
         </div>
         <div className="flex items-center gap-3">

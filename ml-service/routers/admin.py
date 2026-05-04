@@ -87,7 +87,7 @@ async def recommend_price(area: str, hour: int, is_weekend: bool = False, date: 
 
 
 @router.get("/pricing/hourly-schedule")
-async def hourly_price_schedule(area: str = "Indiranagar", is_weekend: bool = False, request: Request = None):
+async def hourly_price_schedule(area: str = "City Center", is_weekend: bool = False, request: Request = None):
     """Return ML-computed price for every hour (0-23) for the given area."""
     engine = request.app.state.engine
     schedule = []
@@ -150,10 +150,14 @@ async def get_fleet(request: Request):
         "Marathahalli": 160, "HSR Layout": 190, "Jayanagar": 140,
         "Electronic City": 130, "Hebbal": 110
     }
-    # Otherwise fallback to default inventory for dynamic zones
+    # Otherwise fallback to default inventory for dynamic zones, distributed based on traffic weights
+    total_weight = sum(getattr(engine, "dynamic_area_weights", {}).values()) or 1.0
     for z in zones:
         if z not in base_totals:
-            base_totals[z] = 150
+            w = getattr(engine, "dynamic_area_weights", {}).get(z, 1.0)
+            # Total synthetic fleet size = len(zones) * 150
+            # Distribute proportionally based on historical area weight
+            base_totals[z] = max(50, int((w / total_weight) * (len(zones) * 150)))
     
     fleet = []
     for a in zones:
@@ -195,7 +199,8 @@ async def get_fleet_models(request: Request):
     is_weekend = datetime.now().weekday() >= 5
 
     # Get current-hour city-wide demand from SARIMA
-    rec = engine.get_price_recommendation("Indiranagar", current_hour, is_weekend)
+    baseline_zone = engine.dynamic_zones[0] if engine.dynamic_zones else "City Center"
+    rec = engine.get_price_recommendation(baseline_zone, current_hour, is_weekend)
     demand_idx = rec.get("demand_index", 1.0)
     surge = rec.get("surge_multiplier", 1.0)
 
@@ -278,9 +283,11 @@ async def get_live_alerts(request: Request):
         "Marathahalli": 160, "HSR Layout": 190, "Jayanagar": 140,
         "Electronic City": 130, "Hebbal": 110
     }
+    total_weight = sum(getattr(engine, "dynamic_area_weights", {}).values()) or 1.0
     for z in areas:
         if z not in base_fleet:
-            base_fleet[z] = 150
+            w = getattr(engine, "dynamic_area_weights", {}).get(z, 1.0)
+            base_fleet[z] = max(50, int((w / total_weight) * (len(areas) * 150)))
 
     # ── STEP 1: Scan next 3 hours across all zones ───────────────────────────
     # For each future hour, get SARIMA demand + surge for every area
@@ -388,7 +395,7 @@ async def get_live_alerts(request: Request):
     alerts.append({
         "type": "info",
         "title": "ML Engine Active",
-        "msg": f"SARIMA models scanning {len(areas)} zones across 3-hour horizon. Last trained on historical Bangalore ride data.",
+        "msg": f"SARIMA models scanning {len(areas)} zones across 3-hour horizon. Last trained on historical uploaded dataset.",
         "action": None,
         "time": "Live",
         "area_high": None,
@@ -426,28 +433,24 @@ async def monthly_report(request: Request):
     import pandas as pd
     df = engine.df
 
-    # Pre-compute per-record revenue (rides × price)
-    df = df.copy()
-    df["ride_revenue"] = df["cnt"] * df["final_price"]
+    COMBO_SCALE = max(1, len(engine.dynamic_zones)) if hasattr(engine, "dynamic_zones") else 1
+    avg_price = float(df["final_price"].mean()) if "final_price" in df.columns else 65.0
 
-    # Number of zone×model combinations in the synthetic data
-    # cnt is the SUM across 8 zones × 6 models = 48 combos per hour
-    # Divide by 48 to get realistic single city-wide demand
-    COMBO_SCALE = 48
-
-    # 1. Historical monthly data
-    monthly = df.groupby(df["dteday"].dt.to_period("M")).agg(
-        rides_raw=("cnt", "sum"),
-        revenue_raw=("ride_revenue", "sum")
-    ).reset_index()
-    monthly["period"]  = monthly["dteday"].astype(str)
-    monthly["rides"]   = (monthly["rides_raw"] / COMBO_SCALE).astype(int)
-    monthly["revenue"] = (monthly["revenue_raw"] / COMBO_SCALE / 100000).round(1)  # → ₹L
-    historical_data = monthly[["period", "rides", "revenue"]].to_dict(orient="records")
+    # 1. Historical monthly data (Use engine.monthly_ts to inherit the incomplete month filtering)
+    historical_data = []
+    if hasattr(engine, "monthly_ts"):
+        for idx, row in engine.monthly_ts.iterrows():
+            period = f"{idx.year}-{idx.month:02d}"
+            rides = int(row["cnt"] / COMBO_SCALE)
+            revenue = round((rides * avg_price) / 100000, 1)  # → ₹L
+            historical_data.append({
+                "period": period,
+                "rides": rides,
+                "revenue": revenue
+            })
 
     # 2. SARIMA Forecast (trained on the same scale → divide by same factor)
     forecast_data = engine.get_monthly_forecast()
-    avg_price = float(df["final_price"].mean())   # ~₹65–70
 
     forecast_records = []
     for f in forecast_data:

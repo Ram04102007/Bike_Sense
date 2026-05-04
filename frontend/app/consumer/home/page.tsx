@@ -180,38 +180,8 @@ export default function ConsumerHome() {
     return () => clearTimeout(timer);
   }, []);
 
-  // Auto-detect closest zone based on user's location
-  useEffect(() => {
-    if ("geolocation" in navigator) {
-      navigator.geolocation.getCurrentPosition(
-        (pos) => {
-          const { latitude, longitude } = pos.coords;
-          const zoneCoords: Record<string, [number, number]> = {
-            "Indiranagar": [12.9784, 77.6408],
-            "Koramangala": [12.9279, 77.6271],
-            "Whitefield": [12.9698, 77.7499],
-            "Marathahalli": [12.9569, 77.7011],
-            "HSR Layout": [12.9121, 77.6446],
-            "Jayanagar": [12.9299, 77.5826],
-            "Electronic City": [12.8399, 77.6770],
-            "Hebbal": [13.0354, 77.5988]
-          };
-          
-          let minDist = Infinity;
-          let closestZone = "Indiranagar";
-          for (const [area, [lat, lon]] of Object.entries(zoneCoords)) {
-            const dist = Math.hypot(latitude - lat, longitude - lon);
-            if (dist < minDist) {
-              minDist = dist;
-              closestZone = area;
-            }
-          }
-          setSelectedArea(closestZone);
-        },
-        (err) => console.log("Geolocation permission denied/failed", err)
-      );
-    }
-  }, []);
+  // Geolocation is disabled here to allow dynamic areas from the dataset to be the default
+  // as the previously hardcoded coordinates were only for Bengaluru.
 
   // Derived values from live data
   const stdPrice  = hourlyData.length ? Math.min(...hourlyData.map(h => h.price)) : 65;
@@ -352,7 +322,7 @@ export default function ConsumerHome() {
         <div className="flex items-start justify-between">
         <div>
           <h1 className="font-display font-bold text-2xl text-white">Welcome back 👋</h1>
-          <p className="text-slate-500 text-sm mt-0.5">Find the best bike deals in Bangalore today</p>
+          <p className="text-slate-500 text-sm mt-0.5">Find the best bike deals in your city today</p>
         </div>
         <div className="text-right flex items-center gap-3">
           {isLive && (
@@ -405,7 +375,7 @@ export default function ConsumerHome() {
             <div className="flex items-center justify-between mb-4">
               <div>
                 <h3 className="font-display font-semibold text-white">Today's Price Trend</h3>
-                <p className="text-xs text-slate-500">Hourly pricing across Bangalore · SARIMA model</p>
+                <p className="text-xs text-slate-500">Hourly pricing across your city · SARIMA model</p>
               </div>
               <TrendingUp className="w-4 h-4 text-emerald-400" />
             </div>

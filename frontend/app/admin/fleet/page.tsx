@@ -35,9 +35,9 @@ export default function FleetPage() {
       const formatted = data.map((z: any) => {
         let rebalance = "Balanced";
         if (z.demand_score > 1.1)
-          rebalance = `Send ${Math.round((z.demand_score - 1) * 30)} bikes`;
+          rebalance = `Receive ${Math.round((z.demand_score - 1) * 30)} bikes`;
         else if (z.demand_score < 0.9)
-          rebalance = `Receive ${Math.round((1 - z.demand_score) * 30)} bikes`;
+          rebalance = `Send ${Math.round((1 - z.demand_score) * 30)} bikes`;
         return { ...z, demand: z.demand_score, rebalance };
       });
 

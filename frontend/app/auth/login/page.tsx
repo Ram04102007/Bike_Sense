@@ -53,7 +53,7 @@ export default function LoginPage() {
           </motion.div>
           <h1 className="font-display font-bold text-4xl text-white mb-3">BikeSense AI</h1>
           <p className="text-slate-400 text-lg max-w-xs mx-auto leading-relaxed">
-            Intelligent bike rental demand forecasting for Bangalore's mobility ecosystem.
+            Intelligent bike rental demand forecasting for your mobility ecosystem.
           </p>
           <div className="mt-12 grid grid-cols-2 gap-3 max-w-xs mx-auto">
             {[["17,379", "Training Records"], ["94.2%", "Forecast Accuracy"], ["8", "City Zones"], ["SARIMA", "ML Model"]].map(([v, l]) => (

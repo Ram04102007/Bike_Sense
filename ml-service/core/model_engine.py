@@ -76,22 +76,33 @@ class ModelEngine:
         # Dynamically determine zones from data
         if "zone" in df.columns and len(df["zone"].dropna().unique()) > 0:
             self.dynamic_zones = list(df["zone"].dropna().unique())
+            zone_col = "zone"
         elif "area_name" in df.columns and len(df["area_name"].dropna().unique()) > 0:
             self.dynamic_zones = list(df["area_name"].dropna().unique())
+            zone_col = "area_name"
         else:
             self.dynamic_zones = ["City Center"]
+            zone_col = None
 
         # Ensure we have clean string names, some generators output "City" etc
         self.dynamic_zones = [str(z).strip() for z in self.dynamic_zones]
         
-        # Equal weights for dynamic zones by default
-        self.dynamic_area_weights = {z: 1.0 for z in self.dynamic_zones}
-        
-        # Try to restore Bangalore weights ONLY if the default Bangalore data is used
-        default_weights = {"Indiranagar":1.3,"Koramangala":1.2,"Whitefield":1.1,"Marathahalli":1.0,"HSR Layout":1.15,"Jayanagar":0.9,"Electronic City":0.95,"Hebbal":0.85}
-        for z in self.dynamic_zones:
-            if z in default_weights:
-                self.dynamic_area_weights[z] = default_weights[z]
+        # Determine area weights realistically based on historical ride sums
+        if zone_col and zone_col in df.columns:
+            zone_sums = df.groupby(zone_col)["cnt"].sum()
+            total_sum = zone_sums.sum()
+            if total_sum > 0:
+                # Weights represent relative demand magnitude
+                self.dynamic_area_weights = {str(z).strip(): float(zone_sums.get(z, 0)) / total_sum * len(self.dynamic_zones) for z in self.dynamic_zones}
+            else:
+                self.dynamic_area_weights = {z: 1.0 for z in self.dynamic_zones}
+        else:
+            self.dynamic_area_weights = {z: 1.0 for z in self.dynamic_zones}
+            
+        # Guarantee no zero weights
+        for z in self.dynamic_area_weights:
+            if self.dynamic_area_weights[z] <= 0.05:
+                self.dynamic_area_weights[z] = 1.0
 
         # Dynamically determine models from data
         if "bike_model" in df.columns and len(df["bike_model"].dropna().unique()) > 0:
@@ -104,7 +115,7 @@ class ModelEngine:
         else:
             self.dynamic_models = ["Standard Bike"]
 
-        self.dynamic_model_prices = {m: 65.0 for m in self.dynamic_models}
+        self.dynamic_model_prices = {}
         default_prices = {
             "Ather 450X": 81, "Bounce Infinity": 69, "Yulu Move": 45,
             "Rapido Bike": 38, "Royal Enfield": 120, "Honda Activa": 55,
@@ -112,6 +123,10 @@ class ModelEngine:
         for m in self.dynamic_models:
             if m in default_prices:
                 self.dynamic_model_prices[m] = default_prices[m]
+            else:
+                # Generate a stable, realistic price between 45 and 150 based on the bike name
+                hash_val = sum(ord(c) for c in m)
+                self.dynamic_model_prices[m] = float(45 + (hash_val % 105))
 
         logger.info(f"Data loaded: {len(df):,} rows. Zones: {len(self.dynamic_zones)}, Models: {len(self.dynamic_models)}")
 
@@ -187,6 +202,12 @@ class ModelEngine:
                           surge_multiplier=("surge_multiplier","mean")).asfreq("D").interpolate("linear"))
         self.monthly_ts = (df.set_index("dteday").resample("ME").agg(
                            cnt=("cnt","sum"),surge_multiplier=("surge_multiplier","mean")))
+        
+        # If the last month in the dataset is incomplete (e.g. ends on the 15th), drop it
+        # so it doesn't look like a massive crash in demand to the SARIMA model.
+        last_date = df["dteday"].max()
+        if last_date.day < last_date.days_in_month - 3:
+            self.monthly_ts = self.monthly_ts.iloc[:-1]
         self.p33 = df["cnt"].quantile(0.33/48)
         self.p66 = df["cnt"].quantile(0.66/48)
         self.p90 = df["cnt"].quantile(0.90/48)
@@ -208,25 +229,34 @@ class ModelEngine:
         logger.info(f"  Daily  AIC={self.fit_daily.aic:.1f}")
 
         logger.info("Fitting long-term SARIMA (monthly)...")
-        self.fit_monthly = SARIMAX(self.monthly_ts["cnt"], order=ORDER_L, seasonal_order=SORDER_L,
-                                   enforce_stationarity=False,enforce_invertibility=False).fit(disp=False)
+        if len(self.monthly_ts) < 24:
+            # Fallback to non-seasonal simple ARIMA for short datasets (prevents crashing to 0)
+            self.fit_monthly = SARIMAX(self.monthly_ts["cnt"], order=(1,1,0),
+                                       enforce_stationarity=False,enforce_invertibility=False).fit(disp=False)
+        else:
+            self.fit_monthly = SARIMAX(self.monthly_ts["cnt"], order=ORDER_L, seasonal_order=SORDER_L,
+                                       enforce_stationarity=False,enforce_invertibility=False).fit(disp=False)
         logger.info(f"  Monthly AIC={self.fit_monthly.aic:.1f}")
 
     # ─── Pre-compute Forecasts ────────────────────────────────────────────────
     def _precompute_forecasts(self):
-        last_h = self.hourly_ts.index[-1]
+        from datetime import datetime
+        now = datetime.now()
+        
+        # Shift short and medium forecasts to be 'Live' starting from exactly right now
+        live_start_h = pd.Timestamp(now).replace(minute=0, second=0, microsecond=0)
         fc_h   = self.fit_hourly.get_forecast(7*24)
         self._fc_short = {"mean": fc_h.predicted_mean.clip(0),
                           "ci":   fc_h.conf_int(0.20),
-                          "idx":  pd.date_range(last_h+pd.Timedelta(hours=1),periods=7*24,freq="h")}
+                          "idx":  pd.date_range(live_start_h, periods=7*24, freq="h")}
         self._fc_short["mean"].index = self._fc_short["idx"]
         self._fc_short["ci"].index   = self._fc_short["idx"]
 
-        last_d = self.daily_ts.index[-1]
+        live_start_d = pd.Timestamp(now).normalize()
         fc_d   = self.fit_daily.get_forecast(30)
         self._fc_med = {"mean": fc_d.predicted_mean.clip(0),
                         "ci":   fc_d.conf_int(0.20),
-                        "idx":  pd.date_range(last_d+pd.Timedelta(days=1),periods=30,freq="D")}
+                        "idx":  pd.date_range(live_start_d, periods=30, freq="D")}
         self._fc_med["mean"].index = self._fc_med["idx"]
         self._fc_med["ci"].index   = self._fc_med["idx"]
 
@@ -297,8 +327,12 @@ class ModelEngine:
                 d_dem = float(self._fc_med["mean"][target_d])
             else:
                 d_dem = float(self.fit_daily.get_forecast(max(1,(target_d.date()-self.daily_ts.index[-1].date()).days)).predicted_mean.iloc[-1])
+            
+            if d_dem <= 0:
+                d_dem = float(self.daily_ts["cnt"].mean())
+                
             norm = float(self.hourly_profile_norm[hr]) / self.hourly_profile_norm.mean()
-            base_agg = max(0, (d_dem / 24.0) * norm)
+            base_agg = max(0.5, (d_dem / 24.0) * norm)
             ci = (max(0, base_agg*0.85), base_agg*1.15)
         else:
             target_me = query_dt.to_period("M").to_timestamp("M")
@@ -306,16 +340,31 @@ class ModelEngine:
                 m_dem = float(self._fc_long["mean"][target_me])
             else:
                 m_dem = float(self.fit_monthly.get_forecast(1).predicted_mean.iloc[-1])
+            
+            if m_dem <= 0:
+                m_dem = float(self.monthly_ts["cnt"].mean())
+                
             d_dem = m_dem / query_dt.days_in_month
             norm  = float(self.hourly_profile_norm[hr]) / self.hourly_profile_norm.mean()
-            base_agg = max(0, (d_dem / 24.0) * norm)
+            base_agg = max(0.5, (d_dem / 24.0) * norm)
             ci = (max(0, base_agg*0.80), base_agg*1.20)
 
         surge       = self.compute_surge(base_agg, date)
+        peak_surge_limit = float(self.surge_config.get("peak_surge", 1.25))
         # Apply area weight on top of city-wide surge to differentiate zones
-        area_surge  = round(min(surge * area_w, 2.0), 4)  # cap at 2x
+        area_surge  = round(min(surge * area_w, peak_surge_limit * 1.5), 4)
         price       = round(model_base * area_surge, 2)
-        labels = {1.00:"Standard",1.08:"Moderate",1.17:"High",1.25:"Peak Surge"}
+        
+        t_mod = round(1.0 + (peak_surge_limit - 1.0) * 0.3, 2)
+        t_high = round(1.0 + (peak_surge_limit - 1.0) * 0.7, 2)
+        if area_surge >= peak_surge_limit:
+            price_label = "Peak Surge"
+        elif area_surge >= t_high:
+            price_label = "High"
+        elif area_surge >= t_mod:
+            price_label = "Moderate"
+        else:
+            price_label = "Standard"
 
         # Demand level string
         p33 = self.hourly_ts["cnt"].quantile(0.33)
@@ -378,8 +427,8 @@ class ModelEngine:
             "surge_multiplier": area_surge,
             "base_price":      model_base,
             "predicted_price": price,
-            "price_label":     labels.get(surge, "Standard"),
-            "savings_vs_peak": round(model_base * 1.25 * area_w - price, 2),
+            "price_label":     price_label,
+            "savings_vs_peak": round(model_base * peak_surge_limit * area_w - price, 2),
             "alt_time":        alt_time,
             "alt_price":       round(model_base * area_w, 2),
             "area_weight":     area_w,
@@ -388,9 +437,15 @@ class ModelEngine:
     # ─── Forecast Series for Charts ──────────────────────────────────────────
     def get_short_forecast(self):
         res = []
-        COMBO_SCALE = 48
+        COMBO_SCALE = max(1, len(self.dynamic_zones))
         for i, (idx, v) in enumerate(self._fc_short["mean"].items()):
             raw_demand = float(v)
+            
+            # Apply realistic weekly variation (SARIMA 24h seasonality misses weekly cycles)
+            # Mon: 1.0, Tue: 1.05, Wed: 1.10, Thu: 1.05, Fri: 1.0, Sat: 0.85, Sun: 0.80
+            day_multipliers = [1.0, 1.05, 1.10, 1.05, 1.0, 0.85, 0.80]
+            raw_demand *= day_multipliers[idx.dayofweek]
+            
             surge = self.compute_surge(raw_demand)
             price = round(BASE_PRICE * surge, 2)
             
@@ -410,7 +465,7 @@ class ModelEngine:
 
     def get_daily_forecast(self):
         res = []
-        COMBO_SCALE = 48
+        COMBO_SCALE = max(1, len(self.dynamic_zones))
         for i, (idx, v) in enumerate(self._fc_med["mean"].items()):
             demand = float(v) / COMBO_SCALE
             lower = float(self._fc_med["ci"].iloc[i, 0]) / COMBO_SCALE
@@ -477,44 +532,36 @@ class ModelEngine:
         ]
     def get_event_pricing(self):
         """Analyze the dataset for explicitly tagged events to extract their dynamic surge and volume impact."""
-        if "event_name" not in self.df.columns:
-            return []
-
-        events_df = self.df[self.df["event_name"] != "None"]
-        if events_df.empty:
-            return []
-
-        # We aggregate by event_name, then by day to calculate daily rides
-        # Then calculate average multiplier, expected rides per day, etc.
-        daily_events = events_df.groupby(["event_name", "dteday"]).agg(
-            daily_cnt=("cnt", "sum"),
-            avg_surge=("surge_multiplier", "mean")
-        ).reset_index()
-
-        # Now group by event_name to average the daily counts
-        summary = daily_events.groupby("event_name").agg(
-            expected_rides=("daily_cnt", "mean"),
-            multiplier=("avg_surge", "mean")
-        ).reset_index()
-
         res = []
-        for _, row in summary.iterrows():
-            mult = row["multiplier"]
-            impact = "High" if mult >= 1.7 else ("Moderate" if mult >= 1.4 else "Low")
-            rides = int(row["expected_rides"])
-            rides_fmt = f"{rides:,}" if "Diwali" not in row["event_name"] else f"{rides:,}/day"
-            
-            # Map events back to standard labels
-            evt_label = row["event_name"]
-            if evt_label == "Diwali": evt_label = "Diwali (Oct 20–24)"
-            if evt_label == "New Year": evt_label = "New Year (Dec 31)"
+        if "event_name" in self.df.columns:
+            events_df = self.df[self.df["event_name"].notna() & (self.df["event_name"] != "None")]
+            if not events_df.empty:
+                daily_events = events_df.groupby(["event_name", "dteday"]).agg(
+                    daily_cnt=("cnt", "sum"),
+                    avg_surge=("surge_multiplier", "mean")
+                ).reset_index()
 
-            res.append({
-                "event": evt_label,
-                "multiplier": round(mult, 2),
-                "expected_rides": rides_fmt,
-                "impact": impact
-            })
+                summary = daily_events.groupby("event_name").agg(
+                    expected_rides=("daily_cnt", "mean"),
+                    multiplier=("avg_surge", "mean")
+                ).reset_index()
+
+                for _, row in summary.iterrows():
+                    mult = row["multiplier"]
+                    impact = "High" if mult >= 1.7 else ("Moderate" if mult >= 1.4 else "Low")
+                    rides = int(row["expected_rides"])
+                    rides_fmt = f"{rides:,}" if "Diwali" not in row["event_name"] else f"{rides:,}/day"
+                    
+                    evt_label = row["event_name"]
+                    if evt_label == "Diwali": evt_label = "Diwali (Oct 20–24)"
+                    if evt_label == "New Year": evt_label = "New Year (Dec 31)"
+
+                    res.append({
+                        "event": evt_label,
+                        "multiplier": round(mult, 2),
+                        "expected_rides": rides_fmt,
+                        "impact": impact
+                    })
         
         # Sort by multiplier descending
         res.sort(key=lambda x: x["multiplier"], reverse=True)
@@ -565,7 +612,7 @@ class ModelEngine:
     def get_revenue_data(self):
         """Revenue KPIs — scaled to realistic city-wide single demand."""
         df = self.df
-        COMBO_SCALE = 48   # 8 zones × 6 models per hourly record
+        COMBO_SCALE = max(1, len(self.dynamic_zones))
 
         total_rides    = int(df["cnt"].sum() / COMBO_SCALE)
         total_revenue  = round(float((df["cnt"] * df["final_price"]).sum() / COMBO_SCALE / 100000), 1)
@@ -610,8 +657,14 @@ class ModelEngine:
         # Demand percentile among all hourly observations
         pct = float((self.hourly_ts["cnt"] < base_dem).mean() * 100)
 
-        tier_labels = {1.00: "Standard", 1.08: "Moderate", 1.17: "High", 1.25: "Peak Surge"}
-        tier = tier_labels.get(surge, "Standard")
+        peak = float(self.surge_config.get("peak_surge", 1.25))
+        t_mod = round(1.0 + (peak - 1.0) * 0.3, 2)
+        t_high = round(1.0 + (peak - 1.0) * 0.7, 2)
+        
+        if surge >= peak: tier = "Peak Surge"
+        elif surge >= t_high: tier = "High"
+        elif surge >= t_mod: tier = "Moderate"
+        else: tier = "Standard"
 
         return {
             "area":              area,
@@ -639,7 +692,7 @@ class ModelEngine:
         
         area_weights = self.dynamic_area_weights
         total_w = sum(area_weights.values())
-        COMBO_SCALE = 48
+        COMBO_SCALE = max(1, len(self.dynamic_zones))
         total_rides = int(df30["cnt"].sum() / COMBO_SCALE)
         
         res = []

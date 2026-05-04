@@ -11,10 +11,12 @@ import {
 } from "lucide-react";
 import { getPricingRec, getHourlyPriceSchedule, getZonePriceMatrix, getEventPricing, getSurgeConfig, updateSurgeConfig, getDynamicZones } from "@/lib/api";
 
-function surgeColor(surge: number) {
-  if (surge >= 1.25) return "#ef4444";
-  if (surge >= 1.17) return "#f97316";
-  if (surge >= 1.08) return "#f59e0b";
+function surgeColor(surge: number, peak: number = 1.25) {
+  const tMod = Number((1.0 + (peak - 1.0) * 0.3).toFixed(2));
+  const tHigh = Number((1.0 + (peak - 1.0) * 0.7).toFixed(2));
+  if (surge >= peak) return "#ef4444";
+  if (surge >= tHigh) return "#f97316";
+  if (surge >= tMod) return "#f59e0b";
   return "#10b981";
 }
 
@@ -41,12 +43,12 @@ function ChartTooltip({ active, payload, label }: any) {
 }
 
 // Surge tier badge colours
-function TierBadge({ tier, surge }: { tier: string; surge: number }) {
+function TierBadge({ tier }: { tier: string }) {
   const cls =
-    surge >= 1.25 ? "bg-red-500/10 text-red-400 border border-red-500/20" :
-    surge >= 1.17 ? "bg-orange-500/10 text-orange-400 border border-orange-500/20" :
-    surge >= 1.08 ? "bg-amber-500/10 text-amber-400 border border-amber-500/20" :
-                    "bg-emerald-500/10 text-emerald-400 border border-emerald-500/20";
+    tier === "Peak Surge" ? "bg-red-500/10 text-red-400 border border-red-500/20" :
+    tier === "High"       ? "bg-orange-500/10 text-orange-400 border border-orange-500/20" :
+    tier === "Moderate"   ? "bg-amber-500/10 text-amber-400 border border-amber-500/20" :
+                            "bg-emerald-500/10 text-emerald-400 border border-emerald-500/20";
   return <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${cls}`}>{tier}</span>;
 }
 
@@ -233,7 +235,7 @@ export default function PricingPage() {
             <DollarSign className="w-6 h-6 text-amber-400" /> Dynamic Pricing Engine
           </h1>
           <p className="text-slate-500 text-sm mt-0.5">
-            AI-driven surge pricing · SARIMA-calibrated · Bangalore · BASE ₹65/ride
+            AI-driven surge pricing · SARIMA-calibrated · BASE ₹65/ride
           </p>
         </div>
         <div className="flex items-center gap-3">
@@ -259,24 +261,30 @@ export default function PricingPage() {
 
       {/* Surge tier legend */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-        {[
-          { label:"Standard",  surge:1.00, price:"₹65.00", color:"#10b981", desc:"Low demand · Off-peak" },
-          { label:"Moderate",  surge:1.08, price:"₹70.20", color:"#f59e0b", desc:"Moderate demand" },
-          { label:"High",      surge:1.17, price:"₹76.05", color:"#f97316", desc:"High demand · Rush" },
-          { label:"Peak Surge",surge:1.25, price:"₹81.25", color:"#ef4444", desc:"Peak hours · Festivals" },
-        ].map((t, i) => (
-          <motion.div key={t.label}
-            initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: i * 0.07 }}
-            className={`glass rounded-xl p-4 border ${mlSurge === t.surge ? "border-white/20" : "border-transparent"}`}>
-            <div className="text-xs text-slate-500 mb-2">{t.label}</div>
-            <div className="font-display font-bold text-2xl mb-0.5" style={{ color: t.color }}>{t.price}</div>
-            <div className="font-mono text-sm text-slate-400 mb-2">×{t.surge.toFixed(2)}</div>
-            <div className="text-xs text-slate-600">{t.desc}</div>
-            {mlSurge === t.surge && (
-              <div className="mt-2 text-xs text-white/50">← Current zone</div>
-            )}
-          </motion.div>
-        ))}
+        {(() => {
+          const peak = surgeConfig?.peak_surge ?? 1.25;
+          const tMod = Number((1.0 + (peak - 1.0) * 0.3).toFixed(2));
+          const tHigh = Number((1.0 + (peak - 1.0) * 0.7).toFixed(2));
+          const tiers = [
+            { label: "Standard", surge: 1.00, price: mlBasePrice * 1.00, color: "#10b981", desc: "Low demand · Off-peak" },
+            { label: "Moderate", surge: tMod, price: mlBasePrice * tMod, color: "#f59e0b", desc: "Moderate demand" },
+            { label: "High", surge: tHigh, price: mlBasePrice * tHigh, color: "#f97316", desc: "High demand · Rush" },
+            { label: "Peak Surge", surge: peak, price: mlBasePrice * peak, color: "#ef4444", desc: "Peak hours · Festivals" },
+          ];
+          return tiers.map((t, i) => (
+            <motion.div key={t.label}
+              initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: i * 0.07 }}
+              className={`glass rounded-xl p-4 border ${mlSurge === t.surge ? "border-white/20" : "border-transparent"}`}>
+              <div className="text-xs text-slate-500 mb-2">{t.label}</div>
+              <div className="font-display font-bold text-2xl mb-0.5" style={{ color: t.color }}>₹{t.price.toFixed(2)}</div>
+              <div className="font-mono text-sm text-slate-400 mb-2">×{t.surge.toFixed(2)}</div>
+              <div className="text-xs text-slate-600">{t.desc}</div>
+              {mlSurge === t.surge && (
+                <div className="mt-2 text-xs text-white/50">← Current zone</div>
+              )}
+            </motion.div>
+          ));
+        })()}
       </div>
 
       {/* Calculator + Chart row */}
@@ -422,7 +430,7 @@ export default function PricingPage() {
                 {/* Breakdown grid */}
                 <div className="grid grid-cols-2 gap-2 mt-3 text-xs">
                   {[
-                    { label:"Surge Tier",       val: <TierBadge tier={mlTier} surge={mlSurge} /> },
+                    { label:"Surge Tier",       val: <TierBadge tier={mlTier} /> },
                     { label:"Strategy",          val: <span className="text-slate-300">{mlStrategy}</span> },
                     { label:"Demand Index",      val: <span className="font-mono text-brand-300">{mlDemandIdx}</span> },
                     { label:"Demand Percentile", val: <span className="font-mono text-slate-300">{mlDemandPct}%</span> },
@@ -481,12 +489,12 @@ export default function PricingPage() {
                   <BarChart data={hourlyData} barCategoryGap="15%">
                     <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.04)" />
                     <XAxis dataKey="hour_label" tick={{ fontSize: 8 }} interval={2} />
-                    <YAxis domain={[60, 85]} tick={{ fontSize: 9 }} tickFormatter={v => `₹${v}`} />
+                    <YAxis domain={[mlBasePrice - 5, mlBasePrice * (surgeConfig?.peak_surge ?? 1.25) + 5]} tick={{ fontSize: 9 }} tickFormatter={v => `₹${v.toFixed(0)}`} />
                     <Tooltip content={<ChartTooltip />} />
-                    <ReferenceLine y={65}    stroke="#10b981" strokeDasharray="3 3"
-                      label={{ value:"Base ₹65", fill:"#10b981", fontSize:9 }} />
-                    <ReferenceLine y={81.25} stroke="#ef4444" strokeDasharray="3 3"
-                      label={{ value:"Peak ₹81.25", fill:"#ef4444", fontSize:9 }} />
+                    <ReferenceLine y={mlBasePrice} stroke="#10b981" strokeDasharray="3 3"
+                      label={{ value:`Base ₹${mlBasePrice}`, fill:"#10b981", fontSize:9 }} />
+                    <ReferenceLine y={mlBasePrice * (surgeConfig?.peak_surge ?? 1.25)} stroke="#ef4444" strokeDasharray="3 3"
+                      label={{ value:`Peak ₹${(mlBasePrice * (surgeConfig?.peak_surge ?? 1.25)).toFixed(2)}`, fill:"#ef4444", fontSize:9 }} />
                     <Bar dataKey="price" name="Price" radius={[3,3,0,0]}>
                       {hourlyData.map((entry, i) => (
                         <Cell key={i}
@@ -512,7 +520,7 @@ export default function PricingPage() {
           <div>
             <h3 className="font-display font-semibold text-white">Live Zone Pricing Matrix</h3>
             <p className="text-xs text-slate-500 mt-0.5">
-              Real-time SARIMA recommendation for all 8 zones
+              Real-time SARIMA recommendation for all {dynamicAreas.length || 8} zones
             </p>
           </div>
           <div className="flex items-center gap-4">
@@ -565,11 +573,11 @@ export default function PricingPage() {
                     z.surge >= 1.17 ? "text-red-400" : z.surge >= 1.08 ? "text-amber-400" : "text-emerald-400"
                   }`}>×{z.surge?.toFixed(2)}</span>
                 </div>
-                <div className="text-2xl font-display font-bold mb-1" style={{ color: surgeColor(z.surge) }}>
+                <div className="text-2xl font-display font-bold mb-1" style={{ color: surgeColor(z.surge, surgeConfig?.peak_surge) }}>
                   ₹{z.price?.toFixed(2)}
                 </div>
                 <div className="flex items-center justify-between mt-1">
-                  <TierBadge tier={z.demand} surge={z.surge} />
+                  <TierBadge tier={z.demand} />
                   {z.rides > 0 && (
                     <span className="text-xs text-slate-600">{z.rides.toLocaleString()} rides</span>
                   )}
@@ -608,6 +616,13 @@ export default function PricingPage() {
             <tbody>
               {eventsLoading ? (
                 <tr><td colSpan={5} className="p-4"><Skeleton className="h-20" /></td></tr>
+              ) : eventsData.length === 0 ? (
+                <tr>
+                  <td colSpan={5} className="py-8 text-center text-slate-500">
+                    <Zap className="w-8 h-8 text-slate-600 mx-auto mb-2 opacity-50" />
+                    No events or holidays found in uploaded dataset
+                  </td>
+                </tr>
               ) : eventsData.map((f, i) => {
                 const festPrice = parseFloat((mlBasePrice * f.multiplier).toFixed(2));
                 return (

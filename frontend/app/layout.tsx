@@ -4,8 +4,8 @@ import "./globals.css";
 
 export const metadata: Metadata = {
   title: "BikeSense AI — Intelligent Bike Demand Forecasting",
-  description: "AI-powered bike rental demand forecasting for Bangalore. Real-time SARIMA predictions for rental companies and smart pricing for consumers.",
-  keywords: "bike rental, demand forecasting, Bangalore, AI, SARIMA, dynamic pricing",
+  description: "AI-powered bike rental demand forecasting. Real-time SARIMA predictions for rental companies and smart pricing for consumers.",
+  keywords: "bike rental, demand forecasting, AI, SARIMA, dynamic pricing",
   openGraph: {
     title: "BikeSense AI",
     description: "Intelligent bike rental demand forecasting platform",

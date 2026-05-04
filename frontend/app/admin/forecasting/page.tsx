@@ -6,7 +6,9 @@ import {
   XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, ReferenceLine,
 } from "recharts";
 import { Brain, TrendingUp, Calendar, Clock, Download, RefreshCw, WifiOff } from "lucide-react";
-import { getShortForecast, getDailyForecast, getHeatmapData, getForecastMetrics, getForecastInsights, type ForecastPoint } from "@/lib/api";
+import { getShortForecast, getDailyForecast, getHeatmapData, getForecastMetrics, getForecastInsights, getSurgeConfig, type ForecastPoint } from "@/lib/api";
+
+const BASE_PRICE = 65;
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 interface ChartPoint {
@@ -28,9 +30,9 @@ function toHourlyChart(points: ForecastPoint[]): ChartPoint[] {
     const hr  = d.getHours().toString().padStart(2, "0");
     return {
       label: `${day} ${hr}:00`,
-      demand: Math.round(p.demand),
-      upper:  Math.round(p.upper || p.demand * 1.18),
-      lower:  Math.round(p.lower || Math.max(0, p.demand * 0.82)),
+      demand: Number(p.demand.toFixed(1)),
+      upper:  Number((p.upper || p.demand * 1.18).toFixed(1)),
+      lower:  Number((p.lower || Math.max(0, p.demand * 0.82)).toFixed(1)),
       price:  p.price,
     };
   });
@@ -44,9 +46,9 @@ function toDailyChart(points: ForecastPoint[]): ChartPoint[] {
     const day = `${days[d.getDay()]} W${Math.ceil(d.getDate() / 7)}`;
     return {
       label:  day,
-      demand: Math.round(p.demand),
-      upper:  Math.round(p.upper || p.demand * 1.15),
-      lower:  Math.round(p.lower || Math.max(0, p.demand * 0.85)),
+      demand: Number(p.demand.toFixed(1)),
+      upper:  Number((p.upper || p.demand * 1.15).toFixed(1)),
+      lower:  Number((p.lower || Math.max(0, p.demand * 0.85)).toFixed(1)),
     };
   });
 }
@@ -61,19 +63,19 @@ function buildHeatmap(raw: { area: string; hour: number; demand: number }[]): He
   return Object.entries(map).map(([area, hours]) => ({ area, hours }));
 }
 
-/** Formula-based fallback heatmap — mirrors the ML engine's area_weights × hourly_profile */
-const FALLBACK_HEATMAP: HeatRow[] = (() => {
-  const areas  = ["Indiranagar","Koramangala","Whitefield","Marathahalli","HSR Layout","Jayanagar","Electronic City","Hebbal"];
-  const weights = [1.3, 1.2, 1.1, 1.0, 1.15, 0.9, 0.95, 0.85];
-  return areas.map((area, ai) => ({
+/** Generate fallback heatmap using dynamic zones instead of hardcoded Bengaluru areas */
+function generateFallbackHeatmap(zones: string[]): HeatRow[] {
+  return zones.map((area, ai) => ({
     area,
     hours: Array.from({ length: 24 }, (_, hr) => {
       const rush = Math.exp(-0.5 * ((hr - 8) / 2.5) ** 2) * 0.8
                  + Math.exp(-0.5 * ((hr - 18) / 2.5) ** 2) * 0.6;
-      return Math.round((80 + rush * 120) * weights[ai]);
+      // cycle through some weights based on index
+      const weight = [1.3, 1.2, 1.1, 1.0, 1.15, 0.9, 0.95, 0.85][ai % 8];
+      return Math.round((80 + rush * 120) * weight);
     }),
   }));
-})();
+}
 
 function Skeleton({ className = "" }: { className?: string }) {
   return <div className={`animate-pulse bg-white/5 rounded-lg ${className}`} />;
@@ -104,10 +106,12 @@ export default function ForecastingPage() {
   const [isLive, setIsLive]     = useState(false);
   const [modelInfo, setModelInfo] = useState({ short_aic: "—", daily_aic: "—", monthly_aic: "—" });
   const [insights, setInsights]   = useState<Array<{emoji: string, title: string, desc: string, tag: string}>>([]);
+  const [dynamicAreas, setDynamicAreas] = useState<string[]>([]);
 
   const [heatmapDate, setHeatmapDate] = useState("");
   const [heatmapLoading, setHeatmapLoading] = useState(false);
   const [selectedTrajectoryDay, setSelectedTrajectoryDay] = useState<string | null>(null);
+  const [peakSurge, setPeakSurge] = useState(1.25);
 
   const fetchHeatmap = async (dateStr: string) => {
     setHeatmapLoading(true);
@@ -128,14 +132,17 @@ export default function ForecastingPage() {
   const loadData = async () => {
     setLoading(true);
     try {
-      const [shortRaw, dailyRaw, heatRaw, metrics, dynInsights] = await Promise.all([
+      const [shortRaw, dailyRaw, heatRaw, metrics, dynInsights, sConfig] = await Promise.all([
         getShortForecast(),
         getDailyForecast(),
         getHeatmapData(heatmapDate || undefined),
         getForecastMetrics(),
         getForecastInsights(),
+        getSurgeConfig(),
       ]);
       const hourly = toHourlyChart(shortRaw);
+      const zones = await import("@/lib/api").then(m => m.getDynamicZones().catch(() => ["City Center"]));
+      setDynamicAreas(zones);
       setHourlyData(hourly);
       setDailyData(toDailyChart(dailyRaw));
       if (heatRaw.length > 0) setHeatmapData(buildHeatmap(heatRaw));
@@ -143,6 +150,7 @@ export default function ForecastingPage() {
       setIsLive(shortRaw.length === 168);
       setModelInfo(metrics);
       setInsights(dynInsights);
+      if (sConfig?.peak_surge) setPeakSurge(sConfig.peak_surge);
     } catch (e) {
       console.error("Forecasting page error:", e);
     } finally {
@@ -152,13 +160,8 @@ export default function ForecastingPage() {
 
   useEffect(() => { loadData(); }, []);
 
-  const demandColor = (v: number) => {
-    if (v > 180) return "bg-red-500";
-    if (v > 140) return "bg-orange-400";
-    if (v > 100) return "bg-amber-400";
-    if (v >  60) return "bg-emerald-500";
-    return "bg-slate-600";
-  };
+  // Colors are now dynamically scaled based on the max value in the current dataset
+  // inside the render function.
 
   // Every 6th point for the hourly chart (thinned so X axis is readable)
   const displayHourly = hourlyData.filter((_, i) => i % 2 === 0);
@@ -289,8 +292,18 @@ export default function ForecastingPage() {
           {loading || heatmapLoading
             ? <Skeleton className="h-48" />
             : (() => {
-                // Use real API data when available, otherwise the formula fallback
-                const rows = heatmapData.length > 0 ? heatmapData : FALLBACK_HEATMAP;
+                // Use real API data when available, otherwise the formula fallback using dynamic zones
+                const rows = heatmapData.length > 0 ? heatmapData : generateFallbackHeatmap(dynamicAreas.length > 0 ? dynamicAreas : ["City Center"]);
+                const maxVal = Math.max(0.1, ...rows.flatMap(r => r.hours));
+                const getDemandColor = (v: number) => {
+                  const pct = v / maxVal;
+                  if (pct > 0.8) return "bg-red-500";
+                  if (pct > 0.6) return "bg-orange-400";
+                  if (pct > 0.4) return "bg-amber-400";
+                  if (pct > 0.2) return "bg-emerald-500";
+                  return "bg-slate-600";
+                };
+
                 return (
                   <div className="overflow-x-auto">
                     <div className="min-w-max">
@@ -307,9 +320,9 @@ export default function ForecastingPage() {
                           {row.hours.filter((_, i) => i % 3 === 0).map((val, i) => (
                             <div
                               key={i}
-                              className={`w-7 h-7 rounded-sm ${demandColor(val)}`}
-                              style={{ opacity: Math.max(0.25, Math.min(0.95, val / 200)) }}
-                              title={`${row.area} @ ${i * 3}:00 → ${val} rides`}
+                              className={`w-7 h-7 rounded-sm ${getDemandColor(val)}`}
+                              style={{ opacity: Math.max(0.25, Math.min(0.95, val / maxVal)) }}
+                              title={`${row.area} @ ${i * 3}:00 → ${val.toFixed(1)} rides`}
                             />
                           ))}
                         </div>
@@ -357,27 +370,36 @@ export default function ForecastingPage() {
               <ResponsiveContainer width="100%" height={200}>
                 <LineChart data={displayTrajectory}>
                   <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.04)" />
-                  <XAxis dataKey="label" tick={{ fontSize: 9 }} interval={selectedTrajectoryDay ? 1 : 3} />
-                  <YAxis domain={[60, 85]} tick={{ fontSize: 10 }} />
+                  <XAxis 
+                    dataKey="label" 
+                    tick={{ fontSize: 9 }} 
+                    interval={selectedTrajectoryDay ? 2 : 3} 
+                    tickFormatter={(tick) => selectedTrajectoryDay ? tick.split(" ")[1] : tick}
+                  />
+                  <YAxis domain={[BASE_PRICE - 5, BASE_PRICE * peakSurge + 5]} tick={{ fontSize: 10 }} />
                   <Tooltip content={<ChartTooltip />} />
-                  <ReferenceLine y={65}    stroke="#10b981" strokeDasharray="3 3" label={{ value: "₹65",    fill: "#10b981", fontSize: 9 }} />
-                  <ReferenceLine y={81.25} stroke="#ef4444" strokeDasharray="3 3" label={{ value: "₹81.25", fill: "#ef4444", fontSize: 9 }} />
+                  <ReferenceLine y={BASE_PRICE}    stroke="#10b981" strokeDasharray="3 3" label={{ value: `₹${BASE_PRICE}`,    fill: "#10b981", fontSize: 9 }} />
+                  <ReferenceLine y={BASE_PRICE * peakSurge} stroke="#ef4444" strokeDasharray="3 3" label={{ value: `₹${(BASE_PRICE * peakSurge).toFixed(2)}`, fill: "#ef4444", fontSize: 9 }} />
                   <Line type="stepAfter" dataKey="price" name="Price (₹)" stroke="#f59e0b" strokeWidth={2.5} dot={selectedTrajectoryDay !== null} />
                 </LineChart>
               </ResponsiveContainer>
             )}
           <div className="mt-4 pt-4 border-t border-white/5 grid grid-cols-4 gap-2 text-center">
-            {[
-              { l: "Standard", v: "₹65",    c: "text-emerald-400" },
-              { l: "Moderate", v: "₹70.20", c: "text-amber-400" },
-              { l: "High",     v: "₹76.05", c: "text-orange-400" },
-              { l: "Peak",     v: "₹81.25", c: "text-red-400" },
-            ].map(t => (
-              <div key={t.l}>
-                <div className={`text-sm font-mono font-bold ${t.c}`}>{t.v}</div>
-                <div className="text-xs text-slate-600">{t.l}</div>
-              </div>
-            ))}
+            {(() => {
+              const tMod = Number((1.0 + (peakSurge - 1.0) * 0.3).toFixed(2));
+              const tHigh = Number((1.0 + (peakSurge - 1.0) * 0.7).toFixed(2));
+              return [
+                { l: "Standard", v: `₹${BASE_PRICE}`,    c: "text-emerald-400" },
+                { l: "Moderate", v: `₹${(BASE_PRICE * tMod).toFixed(2)}`, c: "text-amber-400" },
+                { l: "High",     v: `₹${(BASE_PRICE * tHigh).toFixed(2)}`, c: "text-orange-400" },
+                { l: "Peak",     v: `₹${(BASE_PRICE * peakSurge).toFixed(2)}`, c: "text-red-400" },
+              ].map(t => (
+                <div key={t.l}>
+                  <div className={`text-sm font-mono font-bold ${t.c}`}>{t.v}</div>
+                  <div className="text-xs text-slate-600">{t.l}</div>
+                </div>
+              ));
+            })()}
           </div>
         </div>
       </div>

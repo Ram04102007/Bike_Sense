@@ -29,7 +29,7 @@ const stats = [
 const features = [
   {
     icon: Brain, title:"SARIMA AI Engine",
-    desc:"Three-horizon SARIMA/SARIMAX models — hourly, daily, and monthly — trained on 17,379 real Bangalore data points.",
+    desc:"Three-horizon SARIMA/SARIMAX models — hourly, daily, and monthly — dynamically trained on your uploaded dataset.",
     color:"#6366f1", tag:"ML-Powered"
   },
   {
@@ -39,7 +39,7 @@ const features = [
   },
   {
     icon: MapPin, title:"8-Zone City Intelligence",
-    desc:"Hyper-local demand maps for Indiranagar, Koramangala, Whitefield, and 5 more Bangalore zones.",
+    desc:"Hyper-local demand maps automatically generated for all zones in your city dataset.",
     color:"#00ff88", tag:"Geo-Analytics"
   },
   {
@@ -160,7 +160,7 @@ function Hero() {
           <motion.div initial={{opacity:0,y:20}} animate={{opacity:1,y:0}} transition={{delay:0.1}}
             className="inline-flex items-center gap-2 glass rounded-full px-4 py-1.5 text-sm mb-6">
             <span className="w-2 h-2 bg-green-400 rounded-full animate-pulse" />
-            <span className="text-slate-300">Live forecasts for Bangalore</span>
+            <span className="text-slate-300">Live forecasts for your city</span>
             <span className="text-brand-400">→ 8 zones active</span>
           </motion.div>
 
@@ -173,7 +173,7 @@ function Hero() {
 
           <motion.p initial={{opacity:0,y:20}} animate={{opacity:1,y:0}} transition={{delay:0.3}}
             className="text-slate-400 text-lg leading-relaxed mb-8 max-w-lg">
-            SARIMA-powered demand intelligence for Bangalore's bike rental ecosystem.
+            SARIMA-powered demand intelligence for your bike rental ecosystem.
             Fleet operators maximise revenue. Customers find the best price. Everyone wins.
           </motion.p>
 
@@ -207,7 +207,7 @@ function Hero() {
             <div className="flex items-center justify-between mb-4">
               <div>
                 <p className="text-xs text-slate-500 uppercase tracking-wider mb-1">Live Demand Forecast</p>
-                <h3 className="font-display font-semibold text-white">Today · Bangalore City</h3>
+                <h3 className="font-display font-semibold text-white">Today · Your City</h3>
               </div>
               <span className="badge-success flex items-center gap-1">
                 <span className="w-1.5 h-1.5 bg-green-400 rounded-full animate-pulse" />
@@ -455,7 +455,7 @@ function DashboardsSection() {
                     </AreaChart>
                   </ResponsiveContainer>
                 </div>
-                {[{area:"Indiranagar",bikes:23,price:70.2},{area:"HSR Layout",bikes:31,price:65.0}].map(b=>(
+                {[{area:"Zone A",bikes:23,price:70.2},{area:"Zone B",bikes:31,price:65.0}].map(b=>(
                   <div key={b.area} className="glass rounded-lg p-3 flex items-center justify-between">
                     <div>
                       <div className="text-sm font-medium text-white">{b.area}</div>
@@ -487,7 +487,7 @@ function CTA() {
             Ready to forecast <span className="text-gradient-brand">smarter?</span>
           </h2>
           <p className="text-slate-400 text-lg mb-10">
-            Join 120+ fleet operators and 15,000+ riders using BikeSense AI across Bangalore.
+            Join fleet operators and riders using BikeSense AI across the city.
           </p>
           <div className="flex flex-wrap justify-center gap-4">
             <Link href="/auth/signup" className="btn-primary text-base px-10 py-3 flex items-center gap-2">
@@ -515,7 +515,7 @@ function Footer() {
           <span className="font-display font-bold text-white">BikeSense AI</span>
         </div>
         <p className="text-sm text-slate-600">
-          © 2026 BikeSense AI. Built for Bangalore's mobility ecosystem.
+          © 2026 BikeSense AI. Built for the modern mobility ecosystem.
         </p>
         <div className="flex gap-6 text-sm text-slate-500">
           {["Privacy","Terms","API Docs"].map(l=><a key={l} href="#" className="hover:text-white transition-colors">{l}</a>)}

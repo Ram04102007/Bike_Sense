@@ -10,10 +10,10 @@ const TIERS = [
 ];
 
 const history = [
-  {desc:"Booked Ather 450X · Indiranagar",    pts:"+25",date:"Today",type:"earn"},
+  {desc:"Booked Ather 450X · City Center",    pts:"+25",date:"Today",type:"earn"},
   {desc:"Referral bonus — Priya joined",       pts:"+100",date:"Yesterday",type:"earn"},
   {desc:"Redeemed: 1 Free Hour Coupon",        pts:"-200",date:"3 days ago",type:"redeem"},
-  {desc:"Booked Honda Activa · HSR Layout",    pts:"+18",date:"5 days ago",type:"earn"},
+  {desc:"Booked Honda Activa · Zone A",    pts:"+18",date:"5 days ago",type:"earn"},
   {desc:"Weekend bonus (3 rides in a week)",   pts:"+50",date:"Last week",type:"earn"},
 ];
 

@@ -195,7 +195,7 @@ function SignUpInner() {
           </div>
           <h1 className="font-display font-bold text-4xl text-white mb-3">BikeSense AI</h1>
           <p className="text-slate-400 text-lg max-w-xs mx-auto leading-relaxed">
-            Bangalore&apos;s smartest bike rental platform — powered by SARIMA forecasting.
+            The smartest bike rental platform — powered by SARIMA forecasting.
           </p>
           <div className="mt-10 space-y-3 max-w-xs mx-auto text-left">
             {[

@@ -38,7 +38,7 @@ function transformRaw(raw: any[]): MonthRow[] {
       rides: cur.rides,
       revenue: cur.revenue,
       growth,
-      avgPrice: cur.rides > 0 ? parseFloat(((cur.revenue * 1000) / cur.rides).toFixed(1)) : 0,
+      avgPrice: cur.rides > 0 ? parseFloat(((cur.revenue * 100000) / cur.rides).toFixed(1)) : 0,
       isForecast: !!cur.is_forecast
     };
   });
@@ -150,7 +150,7 @@ function openPrintReport(
 <header>
   <div class="logo">
     <div class="logo-icon">🚲</div>
-    <div><div class="brand-name">BikeSense AI</div><div class="brand-sub">Bangalore's Smart Bike Rental Platform</div></div>
+    <div><div class="brand-name">BikeSense AI</div><div class="brand-sub">Smart Bike Rental Platform</div></div>
   </div>
   <div class="meta">
     <div class="meta-title">${title}</div>

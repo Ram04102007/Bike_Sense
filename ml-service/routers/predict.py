@@ -9,7 +9,7 @@ router = APIRouter()
 class PredictRequest(BaseModel):
     date: str          # YYYY-MM-DD
     time: str          # HH:MM
-    location: str = "Bangalore"
+    location: str = "City Center"
     bike_model: str = "All"
 
 
@@ -82,12 +82,12 @@ async def forecast_insights(request: Request):
 
 
 @router.get("/areas")
-async def get_areas():
-    return {"areas": ["Indiranagar","Koramangala","Whitefield","Marathahalli",
-                       "HSR Layout","Jayanagar","Electronic City","Hebbal"]}
+async def get_areas(request: Request):
+    engine = request.app.state.engine
+    return {"areas": engine.dynamic_zones}
 
 
 @router.get("/bike-models")
-async def get_bike_models():
-    return {"bike_models": ["Ather 450X","Bounce Infinity","Yulu Move",
-                             "Rapido Bike","Royal Enfield","Honda Activa"]}
+async def get_bike_models(request: Request):
+    engine = request.app.state.engine
+    return {"bike_models": engine.dynamic_models}

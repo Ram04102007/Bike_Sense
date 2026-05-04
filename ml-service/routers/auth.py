@@ -220,10 +220,23 @@ async def verify_code(body: VerifyCodeRequest):
     return {"success": True, "message": "Email verified successfully."}
 
 
-# ── Server-side User Registry ──────────────────────────────────────────────────
-# Populated when the frontend calls /register after successful OTP verification.
-# Keyed by user ID. In production, replace with a real DB (PostgreSQL/SQLite).
-_user_registry: dict = {}
+# Server-side User Registry
+# Stored persistently in /tmp so it survives uvicorn reloads.
+_USER_FILE = pathlib.Path("/tmp/bikesense_user_registry.json")
+
+def _load_user_registry() -> dict:
+    if not _USER_FILE.exists():
+        return {}
+    try:
+        return json.loads(_USER_FILE.read_text())
+    except Exception:
+        return {}
+
+def _save_user_registry(registry: dict) -> None:
+    try:
+        _USER_FILE.write_text(json.dumps(registry))
+    except Exception as e:
+        logger.warning(f"Could not persist user registry: {e}")
 
 
 class RegisterUserRequest(BaseModel):
@@ -241,6 +254,7 @@ async def register_user(body: RegisterUserRequest):
     Called by the frontend after OTP verification + local account creation.
     Stores a copy of the user profile server-side for developer visibility.
     """
+    _user_registry = _load_user_registry()
     email = body.email.lower().strip()
 
     # Prevent duplicate registrations (same email)
@@ -248,6 +262,7 @@ async def register_user(body: RegisterUserRequest):
     if existing:
         # Update existing record (e.g. re-registration after password reset)
         _user_registry[body.id] = {**existing, "lastSeenAt": datetime.now().isoformat()}
+        _save_user_registry(_user_registry)
         return {"success": True, "message": "User record updated."}
 
     _user_registry[body.id] = {
@@ -261,6 +276,7 @@ async def register_user(body: RegisterUserRequest):
         "lastSeenAt":  datetime.now().isoformat(),
         "verified":    True,
     }
+    _save_user_registry(_user_registry)
     logger.info(f"✅ New user registered: {body.firstName} {body.lastName} ({email}) as {body.role}")
     return {"success": True, "message": "User registered successfully."}
 
@@ -271,6 +287,7 @@ async def list_users():
     Developer endpoint — returns all registered users sorted by registration date.
     In production: protect this with an admin API key header.
     """
+    _user_registry = _load_user_registry()
     users = sorted(_user_registry.values(), key=lambda u: u["registeredAt"], reverse=True)
     return {
         "success": True,
@@ -282,8 +299,10 @@ async def list_users():
 @router.delete("/users/{user_id}")
 async def delete_user(user_id: str):
     """Remove a user from the server-side registry."""
+    _user_registry = _load_user_registry()
     if user_id not in _user_registry:
         return {"success": False, "error": "User not found."}
     removed = _user_registry.pop(user_id)
+    _save_user_registry(_user_registry)
     logger.info(f"🗑️ User deleted: {removed['email']}")
     return {"success": True, "message": f"User {removed['email']} deleted."}
