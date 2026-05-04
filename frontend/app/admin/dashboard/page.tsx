@@ -120,50 +120,43 @@ function WelcomeSplash({ onDismiss }: { onDismiss: () => void }) {
                   animate={{ y: [0, -3, 0] }}
                   transition={{ duration: 0.35, repeat: Infinity, ease: "easeInOut" }}
                 >
-                  <svg width="90" height="70" viewBox="0 0 90 70" fill="none" xmlns="http://www.w3.org/2000/svg">
+                  <svg width="110" height="70" viewBox="0 0 110 70" fill="none" xmlns="http://www.w3.org/2000/svg">
                     {/* Rear wheel */}
-                    <circle cx="18" cy="50" r="16" stroke="#6366f1" strokeWidth="3" fill="none" />
-                    <circle cx="18" cy="50" r="4" fill="#6366f1" />
-                    {/* Spokes rear */}
-                    {[0,60,120,180,240,300].map((deg, i) => (
-                      <line key={i} x1="18" y1="50"
-                        x2={18 + 12 * Math.cos(deg * Math.PI / 180)}
-                        y2={50 + 12 * Math.sin(deg * Math.PI / 180)}
-                        stroke="#6366f180" strokeWidth="1.2" />
-                    ))}
+                    <circle cx="22" cy="50" r="14" stroke="#6366f1" strokeWidth="5" fill="none" />
+                    <circle cx="22" cy="50" r="7" fill="#6366f1" />
+                    
                     {/* Front wheel */}
-                    <circle cx="72" cy="50" r="16" stroke="#818cf8" strokeWidth="3" fill="none" />
-                    <circle cx="72" cy="50" r="4" fill="#818cf8" />
-                    {/* Spokes front */}
-                    {[0,60,120,180,240,300].map((deg, i) => (
-                      <line key={i} x1="72" y1="50"
-                        x2={72 + 12 * Math.cos(deg * Math.PI / 180)}
-                        y2={50 + 12 * Math.sin(deg * Math.PI / 180)}
-                        stroke="#818cf880" strokeWidth="1.2" />
-                    ))}
-                    {/* Frame: chainstay & seatstay */}
-                    <line x1="18" y1="50" x2="45" y2="22" stroke="#6366f1" strokeWidth="2.5" strokeLinecap="round" />
-                    <line x1="18" y1="50" x2="45" y2="38" stroke="#6366f1" strokeWidth="2.5" strokeLinecap="round" />
-                    {/* Main frame triangle */}
-                    <polygon points="45,22 45,38 72,50 60,22" fill="#6366f115" stroke="#818cf8" strokeWidth="2" strokeLinejoin="round" />
-                    {/* Fork */}
-                    <line x1="60" y1="22" x2="72" y2="50" stroke="#818cf8" strokeWidth="2.5" strokeLinecap="round" />
-                    {/* Handlebar */}
-                    <line x1="60" y1="22" x2="65" y2="16" stroke="#a5b4fc" strokeWidth="2.5" strokeLinecap="round" />
-                    <line x1="63" y1="13" x2="67" y2="19" stroke="#a5b4fc" strokeWidth="2.5" strokeLinecap="round" />
-                    {/* Seat post */}
-                    <line x1="45" y1="22" x2="45" y2="14" stroke="#a5b4fc" strokeWidth="2.5" strokeLinecap="round" />
-                    {/* Saddle */}
-                    <line x1="40" y1="13" x2="52" y2="13" stroke="#c7d2fe" strokeWidth="3" strokeLinecap="round" />
-                    {/* Rider body */}
-                    <ellipse cx="52" cy="20" rx="8" ry="6" fill="#4f46e530" stroke="#6366f1" strokeWidth="1.5" />
-                    {/* Rider head */}
-                    <circle cx="60" cy="14" r="5" fill="#6366f120" stroke="#818cf8" strokeWidth="1.5" />
-                    {/* Rider arm to handlebar */}
-                    <line x1="57" y1="17" x2="63" y2="14" stroke="#818cf8" strokeWidth="1.5" strokeLinecap="round" />
+                    <circle cx="88" cy="50" r="14" stroke="#818cf8" strokeWidth="5" fill="none" />
+                    <circle cx="88" cy="50" r="7" fill="#818cf8" />
+                    
+                    {/* Motorcycle Body / Fairings */}
+                    <path d="M 22 50 L 40 38 L 75 38 L 88 50 L 65 48 L 40 48 Z" fill="#4f46e5" opacity="0.9" />
+                    <path d="M 35 38 L 45 25 L 70 28 L 75 38 Z" fill="#6366f1" />
+                    
+                    {/* Exhaust */}
+                    <line x1="35" y1="46" x2="10" y2="42" stroke="#a5b4fc" strokeWidth="3" strokeLinecap="round" />
+                    
+                    {/* Handlebars & Front fork */}
+                    <line x1="70" y1="28" x2="88" y2="50" stroke="#818cf8" strokeWidth="3" strokeLinecap="round" />
+                    <line x1="70" y1="28" x2="65" y2="20" stroke="#a5b4fc" strokeWidth="3" strokeLinecap="round" />
+
+                    {/* Windshield */}
+                    <path d="M 70 28 L 82 22 L 75 38 Z" fill="#00f5ff" opacity="0.3" />
+                    
+                    {/* Rider Head (Helmet) */}
+                    <circle cx="55" cy="18" r="7" fill="#6366f1" />
+                    <path d="M 58 15 L 62 18 L 58 21 Z" fill="#00f5ff" opacity="0.8" />
+                    
+                    {/* Rider Body */}
+                    <path d="M 55 25 C 45 25, 40 32, 45 38 L 35 38 C 35 30, 45 20, 55 25 Z" fill="#818cf8" />
+                    
+                    {/* Rider Arm */}
+                    <line x1="55" y1="25" x2="65" y2="20" stroke="#818cf8" strokeWidth="4" strokeLinecap="round" />
+                    
                     {/* Headlight glow */}
-                    <circle cx="75" cy="42" r="3" fill="#00f5ff" opacity="0.8" />
-                    <circle cx="75" cy="42" r="6" fill="#00f5ff" opacity="0.15" />
+                    <circle cx="85" cy="40" r="4" fill="#00f5ff" opacity="0.9" />
+                    <circle cx="85" cy="40" r="10" fill="#00f5ff" opacity="0.25" />
+                    <circle cx="85" cy="40" r="20" fill="#00f5ff" opacity="0.1" />
                   </svg>
                 </motion.div>
               </motion.div>
