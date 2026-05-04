@@ -347,3 +347,4 @@ MIT License · Built for Bangalore's mobility ecosystem · © 2026 BikeSense AI
 ---
 
 **Built with ❤️ using SARIMA · Next.js · FastAPI · Clerk**
+
