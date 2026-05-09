@@ -71,7 +71,7 @@ export default function SettingsPage() {
     let awake = false;
     for (let attempt = 0; attempt < 10; attempt++) {
       try {
-        const ping = await fetch("/api/ml/admin/system-status", { signal: AbortSignal.timeout(12000) });
+        const ping = await fetch("/api/ml/admin/system-status");
         if (ping.ok) { awake = true; break; }
       } catch { /* still sleeping, retry */ }
       await new Promise(r => setTimeout(r, 8000));
@@ -93,7 +93,6 @@ export default function SettingsPage() {
       const res = await fetch(`${mlBase}/api/v1/admin/upload-dataset`, {
         method: "POST",
         body: formData,
-        signal: AbortSignal.timeout(180000),
       });
       const data = await res.json();
       toast.dismiss("upload");
