@@ -42,11 +42,15 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
       router.replace("/auth/login");
       return;
     }
+    // Double-check: if a non-admin user somehow lands on /admin/*, force redirect
     if (user.role !== "admin") {
       router.replace("/consumer/home");
       return;
     }
     setCurrentUser(user);
+    // Stamp the current role into sessionStorage so reload-based navigations
+    // stay on the correct dashboard even during fast page reloads
+    sessionStorage.setItem("bikesense_role", user.role);
   }, [router]);
 
   const handleSignOut = () => {

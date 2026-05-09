@@ -30,11 +30,14 @@ export default function ConsumerLayout({ children }: { children: React.ReactNode
       router.replace("/auth/login");
       return;
     }
+    // Double-check: if an admin somehow lands on /consumer/*, force redirect
     if (user.role !== "consumer") {
       router.replace("/admin/dashboard");
       return;
     }
     setCurrentUser(user);
+    // Stamp role in sessionStorage for reload stability
+    sessionStorage.setItem("bikesense_role", user.role);
   }, [router]);
 
   const handleSignOut = () => {

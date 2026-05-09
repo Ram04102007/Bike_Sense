@@ -32,19 +32,24 @@ function WelcomeSplash({ onDismiss }: { onDismiss: () => void }) {
     const formData = new FormData();
     formData.append("file", file);
     try {
-      const mlBase = process.env.NEXT_PUBLIC_ML_API_URL || "http://localhost:8000";
-      const res = await fetch(`${mlBase}/api/v1/admin/upload-dataset`, { method: "POST", body: formData });
+      // File uploads MUST go directly to the ML backend — the Next.js proxy
+      // cannot handle multipart/form-data in Next.js 15 App Router.
+      const mlBase = (process.env.NEXT_PUBLIC_ML_API_URL || "http://localhost:8000").replace(/\/$/, "");
+      const res = await fetch(`${mlBase}/api/v1/admin/upload-dataset`, {
+        method: "POST",
+        body: formData,
+      });
       const data = await res.json();
       if (data.success) {
         setUploaded(true);
-        toast.success("Dataset uploaded! SARIMA models retrained.");
-        setTimeout(onDismiss, 1800);
+        toast.success("Dataset uploaded & models retrained! Refreshing dashboard...");
+        setTimeout(() => { onDismiss(); }, 1800);
       } else {
         toast.error(data.error || "Upload failed");
         setUploading(false);
       }
-    } catch {
-      toast.error("Error communicating with server.");
+    } catch (err: any) {
+      toast.error("Error communicating with ML server: " + (err?.message || "Check backend is running"));
       setUploading(false);
     }
   };

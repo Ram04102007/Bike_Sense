@@ -9,38 +9,53 @@ async function proxy(req: NextRequest, pathSegments: string[]): Promise<NextResp
 
   try {
     const isPost = req.method === "POST" || req.method === "PUT" || req.method === "PATCH";
-    
+    const contentType = req.headers.get("content-type") || "";
+    const isMultipart = contentType.includes("multipart/form-data");
+
     const headers = new Headers();
     req.headers.forEach((value, key) => {
       const lowerKey = key.toLowerCase();
-      // Avoid forwarding headers that can break the proxy request
+      // Drop hop-by-hop headers that break proxying
       if (lowerKey !== "host" && lowerKey !== "connection" && lowerKey !== "content-length") {
         headers.set(key, value);
       }
     });
-    headers.set("Accept", "application/json");
+
+    // For JSON requests, ensure Accept header is set.
+    // For multipart uploads, do NOT override content-type (it contains the boundary).
+    if (!isMultipart) {
+      headers.set("Accept", "application/json");
+    }
 
     const fetchOptions: any = {
       method: req.method,
       headers,
-      signal: AbortSignal.timeout(20000),
+      signal: AbortSignal.timeout(180000),
     };
 
     if (isPost) {
-      const buffer = await req.arrayBuffer();
-      fetchOptions.body = buffer;
-      // duplex is not needed when body is a buffer
+      if (isMultipart) {
+        // Next.js App Router parses multipart bodies automatically.
+        // We must read via formData() and pass a new FormData object to fetch()
+        // so that fetch() generates the correct Content-Type boundary for FastAPI.
+        const formData = await req.formData();
+        fetchOptions.body = formData;
+        // IMPORTANT: Remove content-type so fetch() sets it fresh with the correct boundary
+        headers.delete("content-type");
+      } else {
+        fetchOptions.body = await req.arrayBuffer();
+      }
     }
 
-    console.log(`[ML Proxy] Sending ${req.method} to ${url}`);
+    console.log(`[ML Proxy] ${req.method} ${url} (${isMultipart ? "multipart" : "json"})`);
     const res = await fetch(url, fetchOptions);
-    
+
     const responseText = await res.text();
-    console.log(`[ML Proxy] Response from FastAPI: ${res.status} ${responseText}`);
-    
+    console.log(`[ML Proxy] Response: ${res.status} ${responseText.slice(0, 200)}`);
+
     let data;
     try { data = JSON.parse(responseText); } catch(e) { data = { error: "Invalid JSON from backend", raw: responseText }; }
-    
+
     return NextResponse.json(data, { status: res.status });
   } catch (err: any) {
     console.error(`[ML Proxy] ${req.method} ${url} failed:`, err?.message ?? err);

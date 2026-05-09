@@ -48,17 +48,32 @@ export default function PredictorPage() {
   // ── Dynamic Zones & Models ──────────────────────────────────────────────────
   const [dynamicAreas, setDynamicAreas] = useState<string[]>([]);
   const [dynamicModels, setDynamicModels] = useState<string[]>([]);
+  const [configError, setConfigError] = useState<string | null>(null);
+
+  // Fallback values when backend is unreachable
+  const FALLBACK_ZONES  = ["Indiranagar","Koramangala","Whitefield","Marathahalli","HSR Layout","Jayanagar","Electronic City","Hebbal"];
+  const FALLBACK_MODELS = ["Ather 450X","Bounce Infinity","Yulu Move","Rapido Bike","Royal Enfield","Honda Activa"];
+
+  const initConfig = async () => {
+    setConfigError(null);
+    try {
+      const [zones, models] = await Promise.all([getDynamicZones(), getDynamicModels()]);
+      const z = zones.length > 0 ? zones : FALLBACK_ZONES;
+      const m = models.length > 0 ? models : FALLBACK_MODELS;
+      setDynamicAreas(z);
+      setDynamicModels(m);
+      if (z.length > 0) setForm(f => ({ ...f, area: f.area || z[0] }));
+      if (m.length > 0) setForm(f => ({ ...f, model: f.model || m[0] }));
+    } catch (e) {
+      // Backend unreachable — use fallback data so the form is still usable
+      setDynamicAreas(FALLBACK_ZONES);
+      setDynamicModels(FALLBACK_MODELS);
+      setForm(f => ({ ...f, area: f.area || FALLBACK_ZONES[0], model: f.model || FALLBACK_MODELS[0] }));
+      setConfigError("ML backend offline — using default zones & models. Predictions may fail.");
+    }
+  };
 
   useEffect(() => {
-    const initConfig = async () => {
-      try {
-        const [zones, models] = await Promise.all([getDynamicZones(), getDynamicModels()]);
-        setDynamicAreas(zones);
-        setDynamicModels(models);
-        if (zones.length > 0) setForm(f => ({ ...f, area: zones[0] }));
-        if (models.length > 0) setForm(f => ({ ...f, model: models[0] }));
-      } catch (e) {}
-    };
     initConfig();
   }, []);
 
@@ -136,12 +151,21 @@ export default function PredictorPage() {
               <span className="w-1.5 h-1.5 rounded-full bg-green-400 animate-pulse" /> Live SARIMA
             </span>
           )}
-          <button onClick={loadCharts} disabled={chartsLoading} title="Refresh chart data"
+          <button onClick={() => { initConfig(); loadCharts(); }} disabled={chartsLoading} title="Refresh chart data"
             className="glass rounded-lg px-3 py-2 text-slate-400 hover:text-white transition-colors disabled:opacity-50">
             <RefreshCw className={`w-4 h-4 ${chartsLoading ? "animate-spin" : ""}`} />
           </button>
         </div>
       </div>
+
+      {/* Backend offline warning */}
+      {configError && (
+        <div className="glass rounded-xl p-3 border border-amber-500/30 flex items-center gap-3">
+          <AlertTriangle className="w-4 h-4 text-amber-400 shrink-0" />
+          <p className="text-sm text-amber-300">{configError}</p>
+          <button onClick={initConfig} className="ml-auto text-xs text-amber-400 hover:text-amber-200 underline shrink-0">Retry</button>
+        </div>
+      )}
 
       <div className="grid lg:grid-cols-5 gap-6">
         {/* ── Form ──────────────────────────────────────────────────────── */}

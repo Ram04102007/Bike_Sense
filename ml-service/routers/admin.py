@@ -59,11 +59,12 @@ async def upload_dataset(request: Request, file: UploadFile = File(...)):
             return {"success": False, "error": "Uploaded file is empty."}
         with open(DATA_PATH, "wb") as buffer:
             buffer.write(contents)
-        # Retrain SARIMA models in a background thread (non-blocking)
-        # so the HTTP response returns immediately without timing out
+        # Retrain SARIMA models synchronously in a thread executor.
+        # We WAIT for it to complete so the HTTP response only returns
+        # after the models are fully updated and ready to serve new data.
         loop = asyncio.get_event_loop()
-        loop.run_in_executor(None, engine.train)
-        return {"success": True, "message": "Dataset uploaded! SARIMA models are retraining in the background."}
+        await loop.run_in_executor(None, engine.train)
+        return {"success": True, "message": "Dataset uploaded and SARIMA models retrained successfully!"}
     except Exception as e:
         return {"success": False, "error": str(e)}
 

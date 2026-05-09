@@ -1,10 +1,12 @@
 "use client";
 import { useState, useEffect } from "react";
+import { useRouter } from "next/navigation";
 import { motion } from "framer-motion";
 import { LogOut, User, Database, Moon, Monitor, Shield, UploadCloud, FileText } from "lucide-react";
 import toast from "react-hot-toast";
 
 export default function SettingsPage() {
+  const router = useRouter();
   const [peakSurge, setPeakSurge] = useState(1.25);
   const [eventMultiplier, setEventMultiplier] = useState(1.50);
   const [file, setFile] = useState<File | null>(null);
@@ -66,23 +68,27 @@ export default function SettingsPage() {
     formData.append("file", file);
 
     try {
-      const mlBase = process.env.NEXT_PUBLIC_ML_API_URL || "http://localhost:8000";
+      // File uploads MUST go directly to the ML backend — the Next.js proxy
+      // cannot handle multipart/form-data in Next.js 15 App Router.
+      const mlBase = (process.env.NEXT_PUBLIC_ML_API_URL || "http://localhost:8000").replace(/\/$/, "");
       const res = await fetch(`${mlBase}/api/v1/admin/upload-dataset`, {
         method: "POST",
         body: formData,
       });
       const data = await res.json();
       if (data.success) {
-        toast.success("Dataset uploaded! SARIMA models retrained.");
+        toast.success("Dataset uploaded & models retrained! Refreshing data...");
         setFile(null);
-        // Reset file input value
         const fileInput = document.getElementById("dataset-upload") as HTMLInputElement;
         if (fileInput) fileInput.value = "";
+        // Navigate to dashboard so all widgets reload with fresh ML data.
+        // Using router.push keeps the session intact — no cross-dashboard flash.
+        setTimeout(() => router.push("/admin/dashboard"), 1800);
       } else {
         toast.error(data.error || "Upload failed");
       }
-    } catch {
-      toast.error("Error communicating with server.");
+    } catch (err: any) {
+      toast.error("Error communicating with ML server: " + (err?.message || "Check backend is running"));
     } finally {
       setUploading(false);
     }
