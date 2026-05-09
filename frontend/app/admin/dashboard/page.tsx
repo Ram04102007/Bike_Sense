@@ -31,12 +31,12 @@ function WelcomeSplash({ onDismiss }: { onDismiss: () => void }) {
     setUploading(true);
     const mlBase = (process.env.NEXT_PUBLIC_ML_API_URL || "http://localhost:8000").replace(/\/$/, "");
 
-    // Step 1: Wake up the backend if it's sleeping (Render free tier cold start)
+    // Step 1: Wake up the backend via the proxy (avoids browser CORS on direct Render URL)
     toast.loading("Waking up ML backend...", { id: "warmup" });
     let awake = false;
     for (let attempt = 0; attempt < 10; attempt++) {
       try {
-        const ping = await fetch(`${mlBase}/health`, { signal: AbortSignal.timeout(12000) });
+        const ping = await fetch("/api/ml/admin/system-status", { signal: AbortSignal.timeout(12000) });
         if (ping.ok) { awake = true; break; }
       } catch { /* still sleeping, retry */ }
       await new Promise(r => setTimeout(r, 8000));
