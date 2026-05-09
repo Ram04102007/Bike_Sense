@@ -3,6 +3,26 @@
 > **Production-grade** AI-powered bike rental demand forecasting platform for Bangalore's mobility ecosystem.  
 > Built with SARIMA/SARIMAX on 17,379 real hourly records · Two role-based dashboards · Investor-ready.
 
+## 🌐 Live Demo
+
+| Service | URL |
+|---|---|
+| 🚀 **Frontend (Vercel)** | https://bikesense-git-main-ram04102007s-projects.vercel.app |
+| ⚙️ **ML Backend (Render)** | https://bike-sense-wztb.onrender.com |
+| 📊 **API Health Check** | https://bike-sense-wztb.onrender.com/health |
+
+> **⚠️ Note:** The ML backend runs on Render Free Tier and **spins down after 15 min of inactivity**.  
+> If the dashboard shows errors, open the [health check URL](https://bike-sense-wztb.onrender.com/health) first,  
+> wait ~60–90 seconds for it to wake up, then refresh the app.
+
+### Demo Accounts
+| Role | Email | Password |
+|---|---|---|
+| 🏢 Admin / Operator | `admin@bikesense.ai` | `Admin@1234` |
+| 🚲 Rider / Consumer | `rider@bikesense.ai` | `Rider@1234` |
+
+> First time? Sign up via the app — pick your role (Admin or Rider) during registration.
+
 ---
 
 ## 🎯 What Is BikeSense?
@@ -255,27 +275,39 @@ Response:
 
 ## ☁️ Deployment
 
-### Vercel (Frontend)
+### Live Deployment (Current)
+
+| Service | Platform | URL |
+|---|---|---|
+| Frontend | Vercel | https://bikesense-git-main-ram04102007s-projects.vercel.app |
+| ML Backend | Render | https://bike-sense-wztb.onrender.com |
+
+**Vercel Environment Variables** (already configured):
+```
+ML_API_URL=https://bike-sense-wztb.onrender.com
+NEXT_PUBLIC_ML_API_URL=https://bike-sense-wztb.onrender.com
+```
+
+### Deploy Your Own — Vercel (Frontend)
 
 ```bash
 cd frontend
 npx vercel --prod
 
-# Set environment variables in Vercel dashboard:
-# NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY
-# CLERK_SECRET_KEY
-# NEXT_PUBLIC_ML_API_URL=https://your-ml-service.railway.app
-# DATABASE_URL
+# Set these environment variables in Vercel dashboard:
+# ML_API_URL=https://your-render-service.onrender.com
+# NEXT_PUBLIC_ML_API_URL=https://your-render-service.onrender.com
 ```
 
-### Railway (ML Service)
+### Deploy Your Own — Render (ML Service)
 
-1. Push `ml-service/` folder to GitHub
-2. Create new Railway project → Deploy from GitHub
-3. Set `DATA_PATH` environment variable
-4. Railway will auto-detect the Dockerfile
+1. Push repo to GitHub
+2. Create new Render Web Service → Connect GitHub repo
+3. Set **Root Directory** to `ml-service`
+4. Render auto-detects the `Dockerfile`
+5. Set environment variable: `PORT=8000`
 
-### Docker Compose (Self-hosted)
+### Local Development (Docker Compose)
 
 ```bash
 # Build and run everything
@@ -284,7 +316,6 @@ docker-compose up --build
 # Services:
 # http://localhost:3000  → Frontend
 # http://localhost:8000  → ML API
-# localhost:5432         → PostgreSQL
 ```
 
 ---
