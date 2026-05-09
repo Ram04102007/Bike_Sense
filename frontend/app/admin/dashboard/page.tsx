@@ -29,17 +29,38 @@ function WelcomeSplash({ onDismiss }: { onDismiss: () => void }) {
   const handleUpload = async () => {
     if (!file) return;
     setUploading(true);
+    const mlBase = (process.env.NEXT_PUBLIC_ML_API_URL || "http://localhost:8000").replace(/\/$/, "");
+
+    // Step 1: Wake up the backend if it's sleeping (Render free tier cold start)
+    toast.loading("Waking up ML backend...", { id: "warmup" });
+    let awake = false;
+    for (let attempt = 0; attempt < 10; attempt++) {
+      try {
+        const ping = await fetch(`${mlBase}/health`, { signal: AbortSignal.timeout(12000) });
+        if (ping.ok) { awake = true; break; }
+      } catch { /* still sleeping, retry */ }
+      await new Promise(r => setTimeout(r, 8000));
+    }
+    toast.dismiss("warmup");
+
+    if (!awake) {
+      toast.error("ML backend is not reachable. Please try again in a minute.");
+      setUploading(false);
+      return;
+    }
+
+    // Step 2: Upload the dataset
+    toast.loading("Uploading & training SARIMA models...", { id: "upload" });
     const formData = new FormData();
     formData.append("file", file);
     try {
-      // File uploads MUST go directly to the ML backend — the Next.js proxy
-      // cannot handle multipart/form-data in Next.js 15 App Router.
-      const mlBase = (process.env.NEXT_PUBLIC_ML_API_URL || "http://localhost:8000").replace(/\/$/, "");
       const res = await fetch(`${mlBase}/api/v1/admin/upload-dataset`, {
         method: "POST",
         body: formData,
+        signal: AbortSignal.timeout(180000), // 3 min for large datasets
       });
       const data = await res.json();
+      toast.dismiss("upload");
       if (data.success) {
         setUploaded(true);
         toast.success("Dataset uploaded & models retrained! Refreshing dashboard...");
@@ -49,7 +70,8 @@ function WelcomeSplash({ onDismiss }: { onDismiss: () => void }) {
         setUploading(false);
       }
     } catch (err: any) {
-      toast.error("Error communicating with ML server: " + (err?.message || "Check backend is running"));
+      toast.dismiss("upload");
+      toast.error("Upload failed: " + (err?.message || "Check backend is running"));
       setUploading(false);
     }
   };

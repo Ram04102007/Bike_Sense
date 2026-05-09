@@ -64,31 +64,51 @@ export default function SettingsPage() {
   const handleUpload = async () => {
     if (!file) return;
     setUploading(true);
+    const mlBase = (process.env.NEXT_PUBLIC_ML_API_URL || "http://localhost:8000").replace(/\/$/, "");
+
+    // Step 1: Wake up the backend if sleeping (Render free tier cold start)
+    toast.loading("Waking up ML backend...", { id: "warmup" });
+    let awake = false;
+    for (let attempt = 0; attempt < 10; attempt++) {
+      try {
+        const ping = await fetch(`${mlBase}/health`, { signal: AbortSignal.timeout(12000) });
+        if (ping.ok) { awake = true; break; }
+      } catch { /* still sleeping, retry */ }
+      await new Promise(r => setTimeout(r, 8000));
+    }
+    toast.dismiss("warmup");
+
+    if (!awake) {
+      toast.error("ML backend is not reachable. Please try again in a minute.");
+      setUploading(false);
+      return;
+    }
+
+    // Step 2: Upload the dataset
+    toast.loading("Uploading & training SARIMA models...", { id: "upload" });
     const formData = new FormData();
     formData.append("file", file);
 
     try {
-      // File uploads MUST go directly to the ML backend — the Next.js proxy
-      // cannot handle multipart/form-data in Next.js 15 App Router.
-      const mlBase = (process.env.NEXT_PUBLIC_ML_API_URL || "http://localhost:8000").replace(/\/$/, "");
       const res = await fetch(`${mlBase}/api/v1/admin/upload-dataset`, {
         method: "POST",
         body: formData,
+        signal: AbortSignal.timeout(180000),
       });
       const data = await res.json();
+      toast.dismiss("upload");
       if (data.success) {
         toast.success("Dataset uploaded & models retrained! Refreshing data...");
         setFile(null);
         const fileInput = document.getElementById("dataset-upload") as HTMLInputElement;
         if (fileInput) fileInput.value = "";
-        // Navigate to dashboard so all widgets reload with fresh ML data.
-        // Using router.push keeps the session intact — no cross-dashboard flash.
         setTimeout(() => router.push("/admin/dashboard"), 1800);
       } else {
         toast.error(data.error || "Upload failed");
       }
     } catch (err: any) {
-      toast.error("Error communicating with ML server: " + (err?.message || "Check backend is running"));
+      toast.dismiss("upload");
+      toast.error("Upload failed: " + (err?.message || "Check backend is running"));
     } finally {
       setUploading(false);
     }
